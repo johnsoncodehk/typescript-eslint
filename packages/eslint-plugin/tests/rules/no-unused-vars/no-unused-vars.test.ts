@@ -1,7 +1,7 @@
 import { noFormat, RuleTester } from '@typescript-eslint/rule-tester';
 
 import rule from '../../../src/rules/no-unused-vars';
-import { collectUnusedVariables } from '../../../src/util';
+import { collectVariables } from '../../../src/util';
 import { getFixturesRootDir } from '../../RuleTester';
 
 const ruleTester = new RuleTester({
@@ -22,7 +22,7 @@ const withMetaParserOptions = {
 // this is used to ensure that the caching the utility does does not impact the results done by no-unused-vars
 ruleTester.defineRule('collect-unused-vars', {
   create(context) {
-    collectUnusedVariables(context);
+    collectVariables(context);
     return {};
   },
   defaultOptions: [],
