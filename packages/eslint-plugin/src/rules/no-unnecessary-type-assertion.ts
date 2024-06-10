@@ -1,4 +1,4 @@
-import type { Rule } from '@tsslint/config';
+import type { Rule } from '@tsslint/types';
 import * as tsutils from 'ts-api-utils';
 import type * as ts from 'typescript';
 
