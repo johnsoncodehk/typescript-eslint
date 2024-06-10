@@ -1,83 +1,72 @@
-import type { TSESTree } from '@typescript-eslint/utils';
-import { AST_TOKEN_TYPES } from '@typescript-eslint/utils';
-import type { RuleFix, RuleFixer } from '@typescript-eslint/utils/ts-eslint';
+import type { Rule } from '@tsslint/types';
+import type * as ts from 'typescript';
 
-import { createRule } from '../util';
-
-type MessageIds = 'preferExpectErrorComment';
-
-export default createRule<[], MessageIds>({
-  name: 'prefer-ts-expect-error',
-  meta: {
-    type: 'problem',
-    deprecated: true,
-    replacedBy: ['@typescript-eslint/ban-ts-comment'],
-    docs: {
-      description: 'Enforce using `@ts-expect-error` over `@ts-ignore`',
-    },
-    fixable: 'code',
-    messages: {
-      preferExpectErrorComment:
-        'Use "@ts-expect-error" to ensure an error is actually being suppressed.',
-    },
-    schema: [],
-  },
-  defaultOptions: [],
-  create(context) {
+/**
+ * Enforce using `@ts-expect-error` over `@ts-ignore`
+ */
+export function create(): Rule {
+  return ({ typescript: ts, sourceFile, reportError: report }) => {
     const tsIgnoreRegExpSingleLine = /^\s*\/?\s*@ts-ignore/;
     const tsIgnoreRegExpMultiLine = /^\s*(?:\/|\*)*\s*@ts-ignore/;
 
-    function isLineComment(comment: TSESTree.Comment): boolean {
-      return comment.type === AST_TOKEN_TYPES.Line;
+    function isLineComment(comment: ts.CommentRange): boolean {
+      return ts.SyntaxKind.SingleLineCommentTrivia === comment.kind;
     }
 
-    function getLastCommentLine(comment: TSESTree.Comment): string {
+    function getLastCommentLine(comment: ts.CommentRange): string {
       if (isLineComment(comment)) {
-        return comment.value;
+        return sourceFile.text.slice(comment.pos, comment.end);
       }
 
       // For multiline comments - we look at only the last line.
-      const commentlines = comment.value.split('\n');
+      const commentlines = sourceFile.text
+        .slice(comment.pos, comment.end)
+        .split('\n');
       return commentlines[commentlines.length - 1];
     }
 
-    function isValidTsIgnorePresent(comment: TSESTree.Comment): boolean {
+    function isValidTsIgnorePresent(comment: ts.CommentRange): boolean {
       const line = getLastCommentLine(comment);
       return isLineComment(comment)
-        ? tsIgnoreRegExpSingleLine.test(line)
+        ? tsIgnoreRegExpSingleLine.test(line.slice(2))
         : tsIgnoreRegExpMultiLine.test(line);
     }
 
-    return {
-      Program(): void {
-        const comments = context.sourceCode.getAllComments();
-        comments.forEach(comment => {
-          if (isValidTsIgnorePresent(comment)) {
-            const lineCommentRuleFixer = (fixer: RuleFixer): RuleFix =>
-              fixer.replaceText(
-                comment,
-                `//${comment.value.replace('@ts-ignore', '@ts-expect-error')}`,
-              );
+    ts.forEachChild(sourceFile, function cb(node: ts.Node): void {
+      const comments =
+        ts.getLeadingCommentRanges(sourceFile.text, node.pos) || [];
+      comments.forEach(comment => {
+        if (isValidTsIgnorePresent(comment)) {
+          report(
+            'Use "@ts-expect-error" to ensure an error is actually being suppressed.',
+            comment.pos,
+            comment.end,
+          ).withFix('[No Description]', () => {
+            const replacePos =
+              comment.pos +
+              sourceFile.text
+                .slice(comment.pos, comment.end)
+                .indexOf('@ts-ignore');
+            const replaceLength = '@ts-ignore'.length;
+            return [
+              {
+                fileName: sourceFile.fileName,
+                textChanges: [
+                  {
+                    newText: '@ts-expect-error',
+                    span: {
+                      start: replacePos,
+                      length: replaceLength,
+                    },
+                  },
+                ],
+              },
+            ];
+          });
+        }
+      });
 
-            const blockCommentRuleFixer = (fixer: RuleFixer): RuleFix =>
-              fixer.replaceText(
-                comment,
-                `/*${comment.value.replace(
-                  '@ts-ignore',
-                  '@ts-expect-error',
-                )}*/`,
-              );
-
-            context.report({
-              node: comment,
-              messageId: 'preferExpectErrorComment',
-              fix: isLineComment(comment)
-                ? lineCommentRuleFixer
-                : blockCommentRuleFixer,
-            });
-          }
-        });
-      },
-    };
-  },
-});
+      ts.forEachChild(node, cb);
+    });
+  };
+}
