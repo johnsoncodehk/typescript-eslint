@@ -1,71 +1,41 @@
-import type { TSESTree } from '@typescript-eslint/utils';
-import { AST_NODE_TYPES, AST_TOKEN_TYPES } from '@typescript-eslint/utils';
+import type { Rule } from '@tsslint/config';
 import * as tsutils from 'ts-api-utils';
-import * as ts from 'typescript';
+import type * as ts from 'typescript';
 
 import {
-  createRule,
   getConstrainedTypeAtLocation,
   getContextualType,
   getDeclaration,
-  getParserServices,
   isNullableType,
   isTypeFlagSet,
   nullThrows,
   NullThrowsReasons,
 } from '../util';
 
-type Options = [
-  {
+/**
+ * Disallow type assertions that do not change the type of an expression
+ */
+export function create(
+  options: {
+    /** A list of type names to ignore. */
     typesToIgnore?: string[];
-  },
-];
-type MessageIds = 'contextuallyUnnecessary' | 'unnecessaryAssertion';
-
-export default createRule<Options, MessageIds>({
-  name: 'no-unnecessary-type-assertion',
-  meta: {
-    docs: {
-      description:
-        'Disallow type assertions that do not change the type of an expression',
-      recommended: 'recommended',
-      requiresTypeChecking: true,
-    },
-    fixable: 'code',
-    messages: {
-      unnecessaryAssertion:
-        'This assertion is unnecessary since it does not change the type of the expression.',
-      contextuallyUnnecessary:
-        'This assertion is unnecessary since the receiver accepts the original type of the expression.',
-    },
-    schema: [
-      {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          typesToIgnore: {
-            description: 'A list of type names to ignore.',
-            type: 'array',
-            items: {
-              type: 'string',
-            },
-          },
-        },
-      },
-    ],
-    type: 'suggestion',
-  },
-  defaultOptions: [{}],
-  create(context, [options]) {
-    const services = getParserServices(context);
-    const checker = services.program.getTypeChecker();
-    const compilerOptions = services.program.getCompilerOptions();
+  } = {},
+): Rule {
+  return ({
+    typescript: ts,
+    sourceFile,
+    languageService,
+    reportSuggestion: report,
+  }) => {
+    const program = languageService.getProgram()!;
+    const checker = program.getTypeChecker();
+    const compilerOptions = program.getCompilerOptions();
 
     /**
      * Returns true if there's a chance the variable has been used before a value has been assigned to it
      */
-    function isPossiblyUsedBeforeAssigned(node: TSESTree.Expression): boolean {
-      const declaration = getDeclaration(services, node);
+    function isPossiblyUsedBeforeAssigned(node: ts.Expression): boolean {
+      const declaration = getDeclaration(checker, node);
       if (!declaration) {
         // don't know what the declaration is for some reason, so just assume the worst
         return true;
@@ -87,14 +57,16 @@ export default createRule<Options, MessageIds>({
       ) {
         // check if the defined variable type has changed since assignment
         const declarationType = checker.getTypeFromTypeNode(declaration.type);
-        const type = getConstrainedTypeAtLocation(services, node);
+        const type = getConstrainedTypeAtLocation(checker, node);
         if (
           declarationType === type &&
           // `declare`s are never narrowed, so never skip them
           !(
-            services.tsNodeToESTreeNodeMap.get(declaration)
-              .parent as TSESTree.VariableDeclaration
-          ).declare
+            ts.isVariableStatement(declaration.parent.parent) &&
+            declaration.parent.parent.modifiers?.some(
+              mod => mod.kind === ts.SyntaxKind.DeclareKeyword,
+            )
+          )
         ) {
           // possibly used before assigned, so just skip it
           // better to false negative and skip it, than false positive and fix to compile erroring code
@@ -107,26 +79,26 @@ export default createRule<Options, MessageIds>({
       return false;
     }
 
-    function isConstAssertion(node: TSESTree.TypeNode): boolean {
+    function isConstAssertion(node: ts.TypeNode): boolean {
       return (
-        node.type === AST_NODE_TYPES.TSTypeReference &&
-        node.typeName.type === AST_NODE_TYPES.Identifier &&
-        node.typeName.name === 'const'
+        ts.isTypeReferenceNode(node) &&
+        ts.isIdentifier(node.typeName) &&
+        node.typeName.escapedText === 'const'
       );
     }
 
     function isImplicitlyNarrowedConstDeclaration({
       expression,
       parent,
-    }: TSESTree.TSAsExpression | TSESTree.TSTypeAssertion): boolean {
+    }: ts.AsExpression | ts.TypeAssertion): boolean {
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       const maybeDeclarationNode = parent.parent!;
       const isTemplateLiteralWithExpressions =
-        expression.type === AST_NODE_TYPES.TemplateLiteral &&
-        expression.expressions.length !== 0;
+        ts.isTemplateExpression(expression) &&
+        expression.templateSpans.length !== 0;
       return (
-        maybeDeclarationNode.type === AST_NODE_TYPES.VariableDeclaration &&
-        maybeDeclarationNode.kind === 'const' &&
+        ts.isVariableDeclarationList(maybeDeclarationNode) &&
+        !!(maybeDeclarationNode.flags & ts.NodeFlags.Const) &&
         /**
          * Even on `const` variable declarations, template literals with expressions can sometimes be widened without a type assertion.
          * @see https://github.com/typescript-eslint/typescript-eslint/issues/8737
@@ -167,23 +139,31 @@ export default createRule<Options, MessageIds>({
       return false;
     }
 
-    return {
-      TSNonNullExpression(node): void {
+    const visitor = {
+      TSNonNullExpression(node: ts.NonNullExpression): void {
         if (
-          node.parent.type === AST_NODE_TYPES.AssignmentExpression &&
-          node.parent.operator === '='
+          ts.isBinaryExpression(node.parent) &&
+          node.parent.operatorToken.kind === ts.SyntaxKind.EqualsToken
         ) {
           if (node.parent.left === node) {
-            context.report({
-              node,
-              messageId: 'contextuallyUnnecessary',
-              fix(fixer) {
-                return fixer.removeRange([
-                  node.expression.range[1],
-                  node.range[1],
-                ]);
+            report(
+              'This assertion is unnecessary since the receiver accepts the original type of the expression.',
+              node.getStart(sourceFile),
+              node.getEnd(),
+            ).withFix('[No Description]', () => [
+              {
+                fileName: sourceFile.fileName,
+                textChanges: [
+                  {
+                    newText: '',
+                    span: {
+                      start: node.expression.getEnd(),
+                      length: node.getEnd() - node.expression.getEnd(),
+                    },
+                  },
+                ],
               },
-            });
+            ]);
           }
           // for all other = assignments we ignore non-null checks
           // this is because non-null assertions can change the type-flow of the code
@@ -192,25 +172,36 @@ export default createRule<Options, MessageIds>({
           return;
         }
 
-        const originalNode = services.esTreeNodeToTSNodeMap.get(node);
+        const originalNode = node;
 
-        const type = getConstrainedTypeAtLocation(services, node.expression);
+        const type = getConstrainedTypeAtLocation(checker, node.expression);
 
         if (!isNullableType(type) && !isTypeFlagSet(type, ts.TypeFlags.Void)) {
           if (
-            node.expression.type === AST_NODE_TYPES.Identifier &&
+            ts.isIdentifier(node.expression) &&
             isPossiblyUsedBeforeAssigned(node.expression)
           ) {
             return;
           }
 
-          context.report({
-            node,
-            messageId: 'unnecessaryAssertion',
-            fix(fixer) {
-              return fixer.removeRange([node.range[1] - 1, node.range[1]]);
+          report(
+            'This assertion is unnecessary since it does not change the type of the expression.',
+            node.getStart(sourceFile),
+            node.getEnd(),
+          ).withFix('[No Description]', () => [
+            {
+              fileName: sourceFile.fileName,
+              textChanges: [
+                {
+                  newText: '',
+                  span: {
+                    start: node.getEnd() - 1,
+                    length: 1,
+                  },
+                },
+              ],
             },
-          });
+          ]);
         } else {
           // we know it's a nullable type
           // so figure out if the variable is used in a place that accepts nullable types
@@ -252,97 +243,139 @@ export default createRule<Options, MessageIds>({
               : true;
 
             if (isValidUndefined && isValidNull && isValidVoid) {
-              context.report({
-                node,
-                messageId: 'contextuallyUnnecessary',
-                fix(fixer) {
-                  return fixer.removeRange([
-                    node.expression.range[1],
-                    node.range[1],
-                  ]);
+              report(
+                'This assertion is unnecessary since the receiver accepts the original type of the expression.',
+                node.getStart(sourceFile),
+                node.getEnd(),
+              ).withFix('[No Description]', () => [
+                {
+                  fileName: sourceFile.fileName,
+                  textChanges: [
+                    {
+                      newText: '',
+                      span: {
+                        start: node.expression.getEnd(),
+                        length: node.getEnd() - node.expression.getEnd(),
+                      },
+                    },
+                  ],
                 },
-              });
+              ]);
             }
           }
         }
       },
       'TSAsExpression, TSTypeAssertion'(
-        node: TSESTree.TSAsExpression | TSESTree.TSTypeAssertion,
+        node: ts.AsExpression | ts.TypeAssertion,
       ): void {
         if (
           options.typesToIgnore?.includes(
-            context.sourceCode.getText(node.typeAnnotation),
+            checker.typeToString(checker.getTypeFromTypeNode(node.type)),
           )
         ) {
           return;
         }
 
-        const castType = services.getTypeAtLocation(node);
-        const uncastType = services.getTypeAtLocation(node.expression);
+        const castType = checker.getTypeAtLocation(node);
+        const uncastType = checker.getTypeAtLocation(node.expression);
         const typeIsUnchanged = isTypeUnchanged(uncastType, castType);
 
         const wouldSameTypeBeInferred = castType.isLiteral()
           ? isImplicitlyNarrowedConstDeclaration(node)
-          : !isConstAssertion(node.typeAnnotation);
+          : !isConstAssertion(node.type);
 
         if (typeIsUnchanged && wouldSameTypeBeInferred) {
-          context.report({
-            node,
-            messageId: 'unnecessaryAssertion',
-            fix(fixer) {
-              if (node.type === AST_NODE_TYPES.TSTypeAssertion) {
-                const openingAngleBracket = nullThrows(
-                  context.sourceCode.getTokenBefore(
-                    node.typeAnnotation,
-                    token =>
-                      token.type === AST_TOKEN_TYPES.Punctuator &&
-                      token.value === '<',
-                  ),
-                  NullThrowsReasons.MissingToken('<', 'type annotation'),
-                );
-                const closingAngleBracket = nullThrows(
-                  context.sourceCode.getTokenAfter(
-                    node.typeAnnotation,
-                    token =>
-                      token.type === AST_TOKEN_TYPES.Punctuator &&
-                      token.value === '>',
-                  ),
-                  NullThrowsReasons.MissingToken('>', 'type annotation'),
-                );
-
-                // < ( number ) > ( 3 + 5 )
-                // ^---remove---^
-                return fixer.removeRange([
-                  openingAngleBracket.range[0],
-                  closingAngleBracket.range[1],
-                ]);
-              }
-              // `as` is always present in TSAsExpression
-              const asToken = nullThrows(
-                context.sourceCode.getTokenAfter(
-                  node.expression,
-                  token =>
-                    token.type === AST_TOKEN_TYPES.Identifier &&
-                    token.value === 'as',
-                ),
+          report(
+            'This assertion is unnecessary since it does not change the type of the expression.',
+            node.getStart(sourceFile),
+            node.getEnd(),
+          ).withFix('[No Description]', () => {
+            if (ts.isTypeAssertionExpression(node)) {
+              const openingAngleBracket = getTokenBefore(node.type, sourceFile);
+              nullThrows(
+                openingAngleBracket.kind === ts.SyntaxKind.LessThanToken
+                  ? openingAngleBracket
+                  : undefined,
+                NullThrowsReasons.MissingToken('<', 'type annotation'),
+              );
+              const closingAngleBracket = getTokenAfter(node.type, sourceFile);
+              nullThrows(
+                openingAngleBracket.kind === ts.SyntaxKind.GreaterThanToken
+                  ? openingAngleBracket
+                  : undefined,
                 NullThrowsReasons.MissingToken('>', 'type annotation'),
               );
-              const tokenBeforeAs = nullThrows(
-                context.sourceCode.getTokenBefore(asToken, {
-                  includeComments: true,
-                }),
-                NullThrowsReasons.MissingToken('comment', 'as'),
-              );
 
-              // ( 3 + 5 )  as  number
-              //          ^--remove--^
-              return fixer.removeRange([tokenBeforeAs.range[1], node.range[1]]);
-            },
+              // < ( number ) > ( 3 + 5 )
+              // ^---remove---^
+              return [
+                {
+                  fileName: sourceFile.fileName,
+                  textChanges: [
+                    {
+                      newText: '',
+                      span: {
+                        start: openingAngleBracket.getStart(sourceFile),
+                        length:
+                          closingAngleBracket.getEnd() -
+                          openingAngleBracket.getStart(sourceFile),
+                      },
+                    },
+                  ],
+                },
+              ];
+            }
+            // `as` is always present in TSAsExpression
+            const asToken = getTokenAfter(node.expression, sourceFile);
+            nullThrows(
+              asToken.kind === ts.SyntaxKind.AsKeyword ? asToken : undefined,
+              NullThrowsReasons.MissingToken('>', 'type annotation'),
+            );
+
+            // ( 3 + 5 )  as  number
+            //          ^--remove--^
+            return [
+              {
+                fileName: sourceFile.fileName,
+                textChanges: [
+                  {
+                    newText: '',
+                    span: {
+                      start: asToken.getFullStart(),
+                      length: node.getEnd() - asToken.getFullStart(),
+                    },
+                  },
+                ],
+              },
+            ];
           });
         }
 
         // TODO - add contextually unnecessary check for this
       },
     };
-  },
-});
+
+    sourceFile.forEachChild(function cb(node) {
+      if (ts.isNonNullExpression(node)) {
+        visitor.TSNonNullExpression(node);
+      } else if (
+        ts.isAsExpression(node) ||
+        ts.isTypeAssertionExpression(node)
+      ) {
+        visitor['TSAsExpression, TSTypeAssertion'](node);
+      }
+
+      node.forEachChild(cb);
+    });
+  };
+}
+
+function getTokenBefore(node: ts.Node, sourceFile: ts.SourceFile) {
+  const children = node.parent.getChildren(sourceFile);
+  return children[children.indexOf(node) - 1];
+}
+
+function getTokenAfter(node: ts.Node, sourceFile: ts.SourceFile) {
+  const children = node.parent.getChildren(sourceFile);
+  return children[children.indexOf(node) + 1];
+}

@@ -59,11 +59,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@eslint-community/regexpp": "^4.10.0",
-    "@typescript-eslint/scope-manager": "7.12.0",
-    "@typescript-eslint/type-utils": "7.12.0",
-    "@typescript-eslint/utils": "7.12.0",
-    "@typescript-eslint/visitor-keys": "7.12.0",
     "graphemer": "^1.4.0",
     "ignore": "^5.3.1",
     "natural-compare": "^1.4.0",
@@ -71,15 +66,13 @@
   },
   "devDependencies": {
     "@jest/types": "29.6.3",
+    "@tsslint/config": "latest",
     "@types/marked": "^5.0.2",
     "@types/mdast": "^4.0.3",
     "@types/natural-compare": "*",
-    "@typescript-eslint/rule-schema-to-typescript-types": "7.12.0",
-    "@typescript-eslint/rule-tester": "7.12.0",
     "ajv": "^6.12.6",
     "cross-env": "^7.0.3",
     "cross-fetch": "*",
-    "eslint": "*",
     "espree": "^10.0.1",
     "jest": "29.7.0",
     "jest-specific-snapshot": "^8.0.0",
@@ -95,10 +88,6 @@
     "tsx": "*",
     "typescript": "*",
     "unist-util-visit": "^5.0.0"
-  },
-  "peerDependencies": {
-    "@typescript-eslint/parser": "^7.0.0",
-    "eslint": "^8.56.0"
   },
   "peerDependenciesMeta": {
     "typescript": {
