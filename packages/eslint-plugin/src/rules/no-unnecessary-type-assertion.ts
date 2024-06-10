@@ -139,8 +139,8 @@ export function create(
       return false;
     }
 
-    const visitor = {
-      TSNonNullExpression(node: ts.NonNullExpression): void {
+    sourceFile.forEachChild(function cb(node) {
+      if (ts.isNonNullExpression(node)) {
         if (
           ts.isBinaryExpression(node.parent) &&
           node.parent.operatorToken.kind === ts.SyntaxKind.EqualsToken
@@ -264,10 +264,10 @@ export function create(
             }
           }
         }
-      },
-      'TSAsExpression, TSTypeAssertion'(
-        node: ts.AsExpression | ts.TypeAssertion,
-      ): void {
+      } else if (
+        ts.isAsExpression(node) ||
+        ts.isTypeAssertionExpression(node)
+      ) {
         if (
           options.typesToIgnore?.includes(
             checker.typeToString(checker.getTypeFromTypeNode(node.type)),
@@ -352,17 +352,6 @@ export function create(
         }
 
         // TODO - add contextually unnecessary check for this
-      },
-    };
-
-    sourceFile.forEachChild(function cb(node) {
-      if (ts.isNonNullExpression(node)) {
-        visitor.TSNonNullExpression(node);
-      } else if (
-        ts.isAsExpression(node) ||
-        ts.isTypeAssertionExpression(node)
-      ) {
-        visitor['TSAsExpression, TSTypeAssertion'](node);
       }
 
       node.forEachChild(cb);
