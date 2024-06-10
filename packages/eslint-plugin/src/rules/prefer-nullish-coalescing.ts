@@ -1,13 +1,9 @@
-import type { TSESLint, TSESTree } from '@typescript-eslint/utils';
-import { AST_NODE_TYPES, AST_TOKEN_TYPES } from '@typescript-eslint/utils';
+import type { Rule } from '@tsslint/types';
 import * as tsutils from 'ts-api-utils';
 import * as ts from 'typescript';
 
 import {
-  createRule,
-  getParserServices,
   getTypeFlags,
-  isLogicalOrOperator,
   isNodeEqual,
   isNullLiteral,
   isTypeFlagSet,
@@ -15,118 +11,56 @@ import {
   nullThrows,
   NullThrowsReasons,
 } from '../util';
+import { getTokenAfter } from './no-unnecessary-type-assertion';
 
-export type Options = [
+export type Options = {
+  allowRuleToRunWithoutStrictNullChecksIKnowWhatIAmDoing?: boolean;
+  ignoreConditionalTests?: boolean;
+  ignoreMixedLogicalExpressions?: boolean;
+  ignorePrimitives?:
+    | {
+        bigint?: boolean;
+        boolean?: boolean;
+        number?: boolean;
+        string?: boolean;
+      }
+    | true;
+  ignoreTernaryTests?: boolean;
+};
+
+/**
+ * Enforce using the nullish coalescing operator instead of logical assignments or chaining
+ */
+export function create(
   {
-    allowRuleToRunWithoutStrictNullChecksIKnowWhatIAmDoing?: boolean;
-    ignoreConditionalTests?: boolean;
-    ignoreMixedLogicalExpressions?: boolean;
-    ignorePrimitives?:
-      | {
-          bigint?: boolean;
-          boolean?: boolean;
-          number?: boolean;
-          string?: boolean;
-        }
-      | true;
-    ignoreTernaryTests?: boolean;
+    allowRuleToRunWithoutStrictNullChecksIKnowWhatIAmDoing,
+    ignoreConditionalTests,
+    ignoreTernaryTests,
+    ignoreMixedLogicalExpressions,
+    ignorePrimitives,
+  }: Options = {
+    allowRuleToRunWithoutStrictNullChecksIKnowWhatIAmDoing: false,
+    ignoreConditionalTests: false,
+    ignoreTernaryTests: false,
+    ignoreMixedLogicalExpressions: false,
+    ignorePrimitives: {
+      bigint: false,
+      boolean: false,
+      number: false,
+      string: false,
+    },
   },
-];
+): Rule {
+  return ({
+    typescript: ts,
+    sourceFile,
+    languageService,
+    reportSuggestion: report,
+  }) => {
+    const program = languageService.getProgram()!;
+    const compilerOptions = program.getCompilerOptions();
 
-export type MessageIds =
-  | 'noStrictNullCheck'
-  | 'preferNullishOverOr'
-  | 'preferNullishOverTernary'
-  | 'suggestNullish';
-
-export default createRule<Options, MessageIds>({
-  name: 'prefer-nullish-coalescing',
-  meta: {
-    type: 'suggestion',
-    docs: {
-      description:
-        'Enforce using the nullish coalescing operator instead of logical assignments or chaining',
-      recommended: 'stylistic',
-      requiresTypeChecking: true,
-    },
-    hasSuggestions: true,
-    messages: {
-      preferNullishOverOr:
-        'Prefer using nullish coalescing operator (`??`) instead of a logical or (`||`), as it is a safer operator.',
-      preferNullishOverTernary:
-        'Prefer using nullish coalescing operator (`??`) instead of a ternary expression, as it is simpler to read.',
-      suggestNullish: 'Fix to nullish coalescing operator (`??`).',
-      noStrictNullCheck:
-        'This rule requires the `strictNullChecks` compiler option to be turned on to function correctly.',
-    },
-    schema: [
-      {
-        type: 'object',
-        properties: {
-          allowRuleToRunWithoutStrictNullChecksIKnowWhatIAmDoing: {
-            type: 'boolean',
-          },
-          ignoreConditionalTests: {
-            type: 'boolean',
-          },
-          ignoreMixedLogicalExpressions: {
-            type: 'boolean',
-          },
-          ignorePrimitives: {
-            oneOf: [
-              {
-                type: 'object',
-                properties: {
-                  bigint: { type: 'boolean' },
-                  boolean: { type: 'boolean' },
-                  number: { type: 'boolean' },
-                  string: { type: 'boolean' },
-                },
-              },
-              {
-                type: 'boolean',
-                enum: [true],
-              },
-            ],
-          },
-          ignoreTernaryTests: {
-            type: 'boolean',
-          },
-        },
-        additionalProperties: false,
-      },
-    ],
-  },
-  defaultOptions: [
-    {
-      allowRuleToRunWithoutStrictNullChecksIKnowWhatIAmDoing: false,
-      ignoreConditionalTests: false,
-      ignoreTernaryTests: false,
-      ignoreMixedLogicalExpressions: false,
-      ignorePrimitives: {
-        bigint: false,
-        boolean: false,
-        number: false,
-        string: false,
-      },
-    },
-  ],
-  create(
-    context,
-    [
-      {
-        allowRuleToRunWithoutStrictNullChecksIKnowWhatIAmDoing,
-        ignoreConditionalTests,
-        ignoreMixedLogicalExpressions,
-        ignorePrimitives,
-        ignoreTernaryTests,
-      },
-    ],
-  ) {
-    const parserServices = getParserServices(context);
-    const compilerOptions = parserServices.program.getCompilerOptions();
-
-    const checker = parserServices.program.getTypeChecker();
+    const checker = program.getTypeChecker();
     const isStrictNullChecks = tsutils.isStrictCompilerOptionEnabled(
       compilerOptions,
       'strictNullChecks',
@@ -136,75 +70,101 @@ export default createRule<Options, MessageIds>({
       !isStrictNullChecks &&
       allowRuleToRunWithoutStrictNullChecksIKnowWhatIAmDoing !== true
     ) {
-      context.report({
-        loc: {
-          start: { line: 0, column: 0 },
-          end: { line: 0, column: 0 },
-        },
-        messageId: 'noStrictNullCheck',
-      });
+      report(
+        'This rule requires the `strictNullChecks` compiler option to be turned on to function correctly.',
+        0,
+        0,
+      );
     }
 
-    return {
-      ConditionalExpression(node: TSESTree.ConditionalExpression): void {
+    sourceFile.forEachChild(function cb(node) {
+      if (ts.isConditionalExpression(node)) {
         if (ignoreTernaryTests) {
           return;
         }
 
-        let operator: '!=' | '!==' | '==' | '===' | undefined;
-        let nodesInsideTestExpression: TSESTree.Node[] = [];
-        if (node.test.type === AST_NODE_TYPES.BinaryExpression) {
-          nodesInsideTestExpression = [node.test.left, node.test.right];
-          if (
-            node.test.operator === '==' ||
-            node.test.operator === '!=' ||
-            node.test.operator === '===' ||
-            node.test.operator === '!=='
-          ) {
-            operator = node.test.operator;
-          }
-        } else if (
-          node.test.type === AST_NODE_TYPES.LogicalExpression &&
-          node.test.left.type === AST_NODE_TYPES.BinaryExpression &&
-          node.test.right.type === AST_NODE_TYPES.BinaryExpression
-        ) {
+        let operator: ts.SyntaxKind | undefined;
+        let nodesInsideTestExpression: ts.Node[] = [];
+        if (ts.isBinaryExpression(node.condition)) {
           nodesInsideTestExpression = [
-            node.test.left.left,
-            node.test.left.right,
-            node.test.right.left,
-            node.test.right.right,
+            node.condition.left,
+            node.condition.right,
           ];
-          if (node.test.operator === '||') {
+          if (
+            node.condition.operatorToken.kind ===
+              ts.SyntaxKind.EqualsEqualsToken ||
+            node.condition.operatorToken.kind ===
+              ts.SyntaxKind.ExclamationEqualsToken ||
+            node.condition.operatorToken.kind ===
+              ts.SyntaxKind.EqualsEqualsEqualsToken ||
+            node.condition.operatorToken.kind ===
+              ts.SyntaxKind.ExclamationEqualsEqualsToken
+          ) {
+            operator = node.condition.operatorToken.kind;
+          } else if (
+            isLogicalExpression(node.condition) &&
+            ts.isBinaryExpression(node.condition.left) &&
+            ts.isBinaryExpression(node.condition.right)
+          ) {
+            nodesInsideTestExpression = [
+              node.condition.left.left,
+              node.condition.left.right,
+              node.condition.right.left,
+              node.condition.right.right,
+            ];
             if (
-              node.test.left.operator === '===' &&
-              node.test.right.operator === '==='
+              node.condition.operatorToken.kind === ts.SyntaxKind.BarBarToken
             ) {
-              operator = '===';
+              if (
+                node.condition.left.operatorToken.kind ===
+                  ts.SyntaxKind.EqualsEqualsEqualsToken &&
+                node.condition.right.operatorToken.kind ===
+                  ts.SyntaxKind.EqualsEqualsEqualsToken
+              ) {
+                operator = ts.SyntaxKind.EqualsEqualsEqualsToken;
+              } else if (
+                ((node.condition.left.operatorToken.kind ===
+                  ts.SyntaxKind.EqualsEqualsEqualsToken ||
+                  node.condition.right.operatorToken.kind ===
+                    ts.SyntaxKind.EqualsEqualsEqualsToken) &&
+                  (node.condition.left.operatorToken.kind ===
+                    ts.SyntaxKind.EqualsEqualsToken ||
+                    node.condition.right.operatorToken.kind ===
+                      ts.SyntaxKind.EqualsEqualsToken)) ||
+                (node.condition.left.operatorToken.kind ===
+                  ts.SyntaxKind.EqualsEqualsToken &&
+                  node.condition.right.operatorToken.kind ===
+                    ts.SyntaxKind.EqualsEqualsToken)
+              ) {
+                operator = ts.SyntaxKind.EqualsEqualsToken;
+              }
             } else if (
-              ((node.test.left.operator === '===' ||
-                node.test.right.operator === '===') &&
-                (node.test.left.operator === '==' ||
-                  node.test.right.operator === '==')) ||
-              (node.test.left.operator === '==' &&
-                node.test.right.operator === '==')
+              node.condition.operatorToken.kind ===
+              ts.SyntaxKind.AmpersandAmpersandToken
             ) {
-              operator = '==';
-            }
-          } else if (node.test.operator === '&&') {
-            if (
-              node.test.left.operator === '!==' &&
-              node.test.right.operator === '!=='
-            ) {
-              operator = '!==';
-            } else if (
-              ((node.test.left.operator === '!==' ||
-                node.test.right.operator === '!==') &&
-                (node.test.left.operator === '!=' ||
-                  node.test.right.operator === '!=')) ||
-              (node.test.left.operator === '!=' &&
-                node.test.right.operator === '!=')
-            ) {
-              operator = '!=';
+              if (
+                node.condition.left.operatorToken.kind ===
+                  ts.SyntaxKind.ExclamationEqualsEqualsToken &&
+                node.condition.right.operatorToken.kind ===
+                  ts.SyntaxKind.ExclamationEqualsEqualsToken
+              ) {
+                operator = ts.SyntaxKind.ExclamationEqualsEqualsToken;
+              } else if (
+                ((node.condition.left.operatorToken.kind ===
+                  ts.SyntaxKind.ExclamationEqualsEqualsToken ||
+                  node.condition.right.operatorToken.kind ===
+                    ts.SyntaxKind.ExclamationEqualsEqualsToken) &&
+                  (node.condition.left.operatorToken.kind ===
+                    ts.SyntaxKind.ExclamationEqualsToken ||
+                    node.condition.right.operatorToken.kind ===
+                      ts.SyntaxKind.ExclamationEqualsToken)) ||
+                (node.condition.left.operatorToken.kind ===
+                  ts.SyntaxKind.ExclamationEqualsToken &&
+                  node.condition.right.operatorToken.kind ===
+                    ts.SyntaxKind.ExclamationEqualsToken)
+              ) {
+                operator = ts.SyntaxKind.ExclamationEqualsToken;
+              }
             }
           }
         }
@@ -213,7 +173,7 @@ export default createRule<Options, MessageIds>({
           return;
         }
 
-        let identifier: TSESTree.Node | undefined;
+        let identifier: ts.Node | undefined;
         let hasUndefinedCheck = false;
         let hasNullCheck = false;
 
@@ -224,13 +184,15 @@ export default createRule<Options, MessageIds>({
           } else if (isUndefinedIdentifier(testNode)) {
             hasUndefinedCheck = true;
           } else if (
-            (operator === '!==' || operator === '!=') &&
-            isNodeEqual(testNode, node.consequent)
+            (operator === ts.SyntaxKind.ExclamationEqualsEqualsToken ||
+              operator === ts.SyntaxKind.ExclamationEqualsToken) &&
+            isNodeEqual(testNode, node.whenTrue, sourceFile)
           ) {
             identifier = testNode;
           } else if (
-            (operator === '===' || operator === '==') &&
-            isNodeEqual(testNode, node.alternate)
+            (operator === ts.SyntaxKind.EqualsEqualsEqualsToken ||
+              operator === ts.SyntaxKind.EqualsEqualsToken) &&
+            isNodeEqual(testNode, node.whenFalse, sourceFile)
           ) {
             identifier = testNode;
           } else {
@@ -249,11 +211,14 @@ export default createRule<Options, MessageIds>({
           }
 
           // it is fixable if we loosely check for either null or undefined
-          if (operator === '==' || operator === '!=') {
+          if (
+            operator === ts.SyntaxKind.EqualsEqualsToken ||
+            operator === ts.SyntaxKind.ExclamationEqualsToken
+          ) {
             return true;
           }
 
-          const tsNode = parserServices.esTreeNodeToTSNodeMap.get(identifier);
+          const tsNode = identifier;
           const type = checker.getTypeAtLocation(tsNode);
           const flags = getTypeFlags(type);
 
@@ -275,38 +240,37 @@ export default createRule<Options, MessageIds>({
         })();
 
         if (isFixable) {
-          context.report({
-            node,
-            messageId: 'preferNullishOverTernary',
-            suggest: [
+          report(
+            'Prefer using nullish coalescing operator (`??`) instead of a ternary expression, as it is simpler to read.',
+            node.getStart(sourceFile),
+            node.getEnd(),
+          ).withFix('Fix to nullish coalescing operator (`??`).', () => {
+            const [left, right] =
+              operator === ts.SyntaxKind.EqualsEqualsEqualsToken ||
+              operator === ts.SyntaxKind.EqualsEqualsToken
+                ? [node.whenFalse, node.whenTrue]
+                : [node.whenTrue, node.whenFalse];
+            return [
               {
-                messageId: 'suggestNullish',
-                fix(fixer: TSESLint.RuleFixer): TSESLint.RuleFix {
-                  const [left, right] =
-                    operator === '===' || operator === '=='
-                      ? [node.alternate, node.consequent]
-                      : [node.consequent, node.alternate];
-                  return fixer.replaceText(
-                    node,
-                    `${context.sourceCode.text.slice(
-                      left.range[0],
-                      left.range[1],
-                    )} ?? ${context.sourceCode.text.slice(
-                      right.range[0],
-                      right.range[1],
-                    )}`,
-                  );
-                },
+                fileName: sourceFile.fileName,
+                textChanges: [
+                  {
+                    newText: `${left.getText(sourceFile)} ?? ${right.getText(sourceFile)}`,
+                    span: {
+                      start: node.getStart(sourceFile),
+                      length: node.getWidth(sourceFile),
+                    },
+                  },
+                ],
               },
-            ],
+            ];
           });
         }
-      },
-
-      'LogicalExpression[operator = "||"]'(
-        node: TSESTree.LogicalExpression,
-      ): void {
-        const tsNode = parserServices.esTreeNodeToTSNodeMap.get(node);
+      } else if (
+        ts.isBinaryExpression(node) &&
+        node.operatorToken.kind === ts.SyntaxKind.BarBarToken
+      ) {
+        const tsNode = node;
         const type = checker.getTypeAtLocation(tsNode.left);
         if (!isTypeFlagSet(type, ts.TypeFlags.Null | ts.TypeFlags.Undefined)) {
           return;
@@ -346,71 +310,104 @@ export default createRule<Options, MessageIds>({
         }
         /* eslint-enable @typescript-eslint/no-non-null-assertion */
 
-        const barBarOperator = nullThrows(
-          context.sourceCode.getTokenAfter(
-            node.left,
-            token =>
-              token.type === AST_TOKEN_TYPES.Punctuator &&
-              token.value === node.operator,
-          ),
-          NullThrowsReasons.MissingToken('operator', node.type),
+        const barBarOperator = getTokenAfter(node.left, sourceFile);
+        nullThrows(
+          barBarOperator.kind === node.operatorToken.kind
+            ? barBarOperator
+            : undefined,
+          NullThrowsReasons.MissingToken('operator', '||'),
         );
 
-        function* fix(
-          fixer: TSESLint.RuleFixer,
-        ): IterableIterator<TSESLint.RuleFix> {
-          if (isLogicalOrOperator(node.parent)) {
-            // '&&' and '??' operations cannot be mixed without parentheses (e.g. a && b ?? c)
+        report(
+          'Prefer using nullish coalescing operator (`??`) instead of a logical or (`||`), as it is a safer operator.',
+          barBarOperator.getStart(sourceFile),
+          barBarOperator.getEnd(),
+        ).withFix('Fix to nullish coalescing operator (`??`).', () => {
+          const textChanges: ts.TextChange[] = [];
+          if (isLogicalOrExpression(node.parent)) {
+            // ts.SyntaxKind.AmpersandAmpersandToken and '??' operations cannot be mixed without parentheses (e.g. a && b ?? c)
             if (
-              node.left.type === AST_NODE_TYPES.LogicalExpression &&
-              !isLogicalOrOperator(node.left.left)
+              isLogicalExpression(node.left) &&
+              !isLogicalOrExpression(node.left.left)
             ) {
-              yield fixer.insertTextBefore(node.left.right, '(');
+              textChanges.push({
+                newText: '(',
+                span: {
+                  start: node.left.right.getStart(sourceFile),
+                  length: 0,
+                },
+              });
             } else {
-              yield fixer.insertTextBefore(node.left, '(');
+              textChanges.push({
+                newText: '(',
+                span: {
+                  start: node.left.getStart(sourceFile),
+                  length: 0,
+                },
+              });
             }
-            yield fixer.insertTextAfter(node.right, ')');
+            textChanges.push({
+              newText: ')',
+              span: {
+                start: node.right.getEnd(),
+                length: 0,
+              },
+            });
           }
-          yield fixer.replaceText(barBarOperator, '??');
-        }
-
-        context.report({
-          node: barBarOperator,
-          messageId: 'preferNullishOverOr',
-          suggest: [
-            {
-              messageId: 'suggestNullish',
-              fix,
+          textChanges.push({
+            newText: '??',
+            span: {
+              start: barBarOperator.getStart(sourceFile),
+              length: barBarOperator.getWidth(sourceFile),
             },
-          ],
+          });
+          return [
+            {
+              fileName: sourceFile.fileName,
+              textChanges,
+            },
+          ];
         });
-      },
-    };
-  },
-});
+      }
 
-function isConditionalTest(node: TSESTree.Node): boolean {
-  const parents = new Set<TSESTree.Node | null>([node]);
+      node.forEachChild(cb);
+    });
+  };
+}
+
+function isConditionalTest(node: ts.Node): boolean {
+  const parents = new Set<ts.Node | null>([node]);
   let current = node.parent;
   while (current) {
     parents.add(current);
 
     if (
-      (current.type === AST_NODE_TYPES.ConditionalExpression ||
-        current.type === AST_NODE_TYPES.DoWhileStatement ||
-        current.type === AST_NODE_TYPES.IfStatement ||
-        current.type === AST_NODE_TYPES.ForStatement ||
-        current.type === AST_NODE_TYPES.WhileStatement) &&
-      parents.has(current.test)
+      (current.kind === (227 satisfies ts.SyntaxKind.ConditionalExpression) ||
+        current.kind === (248 satisfies ts.SyntaxKind.ForStatement)) &&
+      parents.has(
+        (current as ts.ConditionalExpression | ts.ForStatement).condition!,
+      )
+    ) {
+      return true;
+    }
+
+    if (
+      (current.kind === (246 satisfies ts.SyntaxKind.DoStatement) ||
+        current.kind === (245 satisfies ts.SyntaxKind.IfStatement) ||
+        current.kind === (247 satisfies ts.SyntaxKind.WhileStatement)) &&
+      parents.has(
+        (current as ts.DoStatement | ts.IfStatement | ts.WhileStatement)
+          .expression,
+      )
     ) {
       return true;
     }
 
     if (
       [
-        AST_NODE_TYPES.ArrowFunctionExpression,
-        AST_NODE_TYPES.FunctionExpression,
-      ].includes(current.type)
+        219 satisfies ts.SyntaxKind.ArrowFunction,
+        218 satisfies ts.SyntaxKind.FunctionExpression,
+      ].includes(current.kind)
     ) {
       /**
        * This is a weird situation like:
@@ -426,8 +423,8 @@ function isConditionalTest(node: TSESTree.Node): boolean {
   return false;
 }
 
-function isMixedLogicalExpression(node: TSESTree.LogicalExpression): boolean {
-  const seen = new Set<TSESTree.Node | undefined>();
+function isMixedLogicalExpression(node: ts.BinaryExpression): boolean {
+  const seen = new Set<ts.Node | undefined>();
   const queue = [node.parent, node.left, node.right];
   for (const current of queue) {
     if (seen.has(current)) {
@@ -435,15 +432,44 @@ function isMixedLogicalExpression(node: TSESTree.LogicalExpression): boolean {
     }
     seen.add(current);
 
-    if (current.type === AST_NODE_TYPES.LogicalExpression) {
-      if (current.operator === '&&') {
+    if (isLogicalExpression(current)) {
+      if (
+        current.operatorToken.kind ===
+        (56 satisfies ts.SyntaxKind.AmpersandAmpersandToken)
+      ) {
         return true;
-      } else if (current.operator === '||') {
+      } else if (
+        current.operatorToken.kind === (57 satisfies ts.SyntaxKind.BarBarToken)
+      ) {
         // check the pieces of the node to catch cases like `a || b || c && d`
         queue.push(current.parent, current.left, current.right);
       }
     }
   }
 
+  return false;
+}
+
+function isLogicalExpression(node: ts.Node): node is ts.BinaryExpression {
+  return isLogicalOrExpression(node) || isLogicalAndExpression(node);
+}
+
+function isLogicalOrExpression(node: ts.Node): node is ts.BinaryExpression {
+  if (node.kind === (226 satisfies ts.SyntaxKind.BinaryExpression)) {
+    return (
+      (node as ts.BinaryExpression).operatorToken.kind ===
+      (57 satisfies ts.SyntaxKind.BarBarToken)
+    );
+  }
+  return false;
+}
+
+function isLogicalAndExpression(node: ts.Node): node is ts.BinaryExpression {
+  if (node.kind === (226 satisfies ts.SyntaxKind.BinaryExpression)) {
+    return (
+      (node as ts.BinaryExpression).operatorToken.kind ===
+      (56 satisfies ts.SyntaxKind.AmpersandAmpersandToken)
+    );
+  }
   return false;
 }

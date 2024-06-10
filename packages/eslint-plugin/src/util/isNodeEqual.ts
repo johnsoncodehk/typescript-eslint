@@ -1,31 +1,46 @@
-import type { TSESTree } from '@typescript-eslint/utils';
-import { AST_NODE_TYPES } from '@typescript-eslint/utils';
+import * as ts from 'typescript';
 
-export function isNodeEqual(a: TSESTree.Node, b: TSESTree.Node): boolean {
-  if (a.type !== b.type) {
+export function isNodeEqual(
+  a: ts.Node,
+  b: ts.Node,
+  sourceFile: ts.SourceFile,
+): boolean {
+  if (a.kind !== b.kind) {
     return false;
   }
   if (
-    a.type === AST_NODE_TYPES.ThisExpression &&
-    b.type === AST_NODE_TYPES.ThisExpression
+    a.kind === (110 satisfies ts.SyntaxKind.ThisKeyword) &&
+    b.kind === (110 satisfies ts.SyntaxKind.ThisKeyword)
   ) {
     return true;
   }
-  if (a.type === AST_NODE_TYPES.Literal && b.type === AST_NODE_TYPES.Literal) {
-    return a.value === b.value;
-  }
   if (
-    a.type === AST_NODE_TYPES.Identifier &&
-    b.type === AST_NODE_TYPES.Identifier
+    a.kind === (11 satisfies ts.SyntaxKind.StringLiteral) &&
+    b.kind === (11 satisfies ts.SyntaxKind.StringLiteral)
   ) {
-    return a.name === b.name;
+    return a.getText(sourceFile) === b.getText(sourceFile);
   }
   if (
-    a.type === AST_NODE_TYPES.MemberExpression &&
-    b.type === AST_NODE_TYPES.MemberExpression
+    a.kind === (80 satisfies ts.SyntaxKind.Identifier) &&
+    b.kind === (80 satisfies ts.SyntaxKind.Identifier)
+  ) {
+    return a.getText(sourceFile) === b.getText(sourceFile);
+  }
+  if (
+    a.kind === (211 satisfies ts.SyntaxKind.PropertyAccessExpression) &&
+    b.kind === (211 satisfies ts.SyntaxKind.PropertyAccessExpression)
   ) {
     return (
-      isNodeEqual(a.property, b.property) && isNodeEqual(a.object, b.object)
+      isNodeEqual(
+        (a as ts.PropertyAccessExpression).name,
+        (b as ts.PropertyAccessExpression).name,
+        sourceFile,
+      ) &&
+      isNodeEqual(
+        (a as ts.PropertyAccessExpression).expression,
+        (b as ts.PropertyAccessExpression).expression,
+        sourceFile,
+      )
     );
   }
   return false;

@@ -1,6 +1,5 @@
-import type { TSESTree } from '@typescript-eslint/utils';
-import { AST_NODE_TYPES } from '@typescript-eslint/utils';
+import * as ts from 'typescript';
 
-export function isUndefinedIdentifier(i: TSESTree.Node): boolean {
-  return i.type === AST_NODE_TYPES.Identifier && i.name === 'undefined';
+export function isUndefinedIdentifier(i: ts.Node) {
+  return i.kind === ts.SyntaxKind.UndefinedKeyword;
 }
