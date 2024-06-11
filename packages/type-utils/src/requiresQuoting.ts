@@ -1,8 +1,9 @@
-import * as ts from 'typescript';
+import type * as ts from 'typescript';
 /*** Indicates whether identifiers require the use of quotation marks when accessing property definitions and dot notation. */
 function requiresQuoting(
+  ts: typeof import('typescript'),
   name: string,
-  target: ts.ScriptTarget = ts.ScriptTarget.ESNext,
+  target: ts.ScriptTarget = 99 satisfies ts.ScriptTarget.ESNext,
 ): boolean {
   if (name.length === 0) {
     return true;

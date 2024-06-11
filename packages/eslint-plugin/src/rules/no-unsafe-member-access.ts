@@ -79,9 +79,7 @@ export default createRule({
 
           if (
             thisExpression &&
-            isTypeAnyType(
-              getConstrainedTypeAtLocation(services, thisExpression),
-            )
+            isTypeAnyType(getConstrainedTypeAtLocation(checker, thisExpression))
           ) {
             messageId = 'unsafeThisMemberExpression';
           }

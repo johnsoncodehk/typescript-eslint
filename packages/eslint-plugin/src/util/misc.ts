@@ -5,14 +5,14 @@
 import { requiresQuoting } from '@typescript-eslint/type-utils';
 import type { TSESLint, TSESTree } from '@typescript-eslint/utils';
 import { AST_NODE_TYPES } from '@typescript-eslint/utils';
-import * as ts from 'typescript';
+import type * as ts from 'typescript';
 
 import { isParenthesized } from './astUtils';
 
 const DEFINITION_EXTENSIONS = [
-  ts.Extension.Dts,
-  ts.Extension.Dcts,
-  ts.Extension.Dmts,
+  '.d.ts' as ts.Extension.Dts,
+  '.d.cts' as ts.Extension.Dcts,
+  '.d.mts' as ts.Extension.Dmts,
 ] as const;
 /**
  * Check if the context file name is *.d.ts or *.d.tsx
@@ -108,6 +108,7 @@ enum MemberNameType {
  * or PropertyDefinition node, with handling for computed property names.
  */
 function getNameFromMember(
+  ts: typeof import('typescript'),
   member:
     | TSESTree.MethodDefinition
     | TSESTree.Property
@@ -132,7 +133,7 @@ function getNameFromMember(
   }
   if (member.key.type === AST_NODE_TYPES.Literal) {
     const name = `${member.key.value}`;
-    if (requiresQuoting(name)) {
+    if (requiresQuoting(ts, name)) {
       return {
         type: MemberNameType.Quoted,
         name: `"${name}"`,
@@ -218,7 +219,10 @@ function typeNodeRequiresParentheses(
 }
 
 function isRestParameterDeclaration(decl: ts.Declaration): boolean {
-  return ts.isParameter(decl) && decl.dotDotDotToken != null;
+  return (
+    decl.kind === (169 satisfies ts.SyntaxKind.Parameter) &&
+    (decl as ts.ParameterDeclaration).dotDotDotToken != null
+  );
 }
 
 function isParenlessArrowFunction(

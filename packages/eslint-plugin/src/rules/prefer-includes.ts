@@ -232,7 +232,7 @@ export default createRule({
 
         //check the argument type of test methods
         const argument = callNode.arguments[0];
-        const type = getConstrainedTypeAtLocation(services, argument);
+        const type = getConstrainedTypeAtLocation(checker, argument);
 
         const includesMethodDecl = type
           .getProperty('includes')

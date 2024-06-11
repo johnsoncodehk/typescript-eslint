@@ -1,6 +1,6 @@
 import debug from 'debug';
 import * as tsutils from 'ts-api-utils';
-import * as ts from 'typescript';
+import type * as ts from 'typescript';
 
 import { isTypeFlagSet } from './typeFlagUtils';
 
@@ -26,10 +26,10 @@ export function isNullableType(
 ): boolean {
   return isTypeFlagSet(
     type,
-    ts.TypeFlags.Any |
-      ts.TypeFlags.Unknown |
-      ts.TypeFlags.Null |
-      ts.TypeFlags.Undefined,
+    (1 satisfies ts.TypeFlags.Any) |
+      (2 satisfies ts.TypeFlags.Unknown) |
+      (65536 satisfies ts.TypeFlags.Null) |
+      (32768 satisfies ts.TypeFlags.Undefined),
   );
 }
 
@@ -54,39 +54,41 @@ export function isTypeArrayTypeOrUnionOfArrayTypes(
  * @returns true if the type is `never`
  */
 export function isTypeNeverType(type: ts.Type): boolean {
-  return isTypeFlagSet(type, ts.TypeFlags.Never);
+  return isTypeFlagSet(type, 131072 satisfies ts.TypeFlags.Never);
 }
 
 /**
  * @returns true if the type is `unknown`
  */
 export function isTypeUnknownType(type: ts.Type): boolean {
-  return isTypeFlagSet(type, ts.TypeFlags.Unknown);
+  return isTypeFlagSet(type, 2 satisfies ts.TypeFlags.Unknown);
 }
 
 // https://github.com/microsoft/TypeScript/blob/42aa18bf442c4df147e30deaf27261a41cbdc617/src/compiler/types.ts#L5157
-const Nullable = ts.TypeFlags.Undefined | ts.TypeFlags.Null;
+const Nullable =
+  (32768 satisfies ts.TypeFlags.Undefined) |
+  (65536 satisfies ts.TypeFlags.Null);
 // https://github.com/microsoft/TypeScript/blob/42aa18bf442c4df147e30deaf27261a41cbdc617/src/compiler/types.ts#L5187
 const ObjectFlagsType =
-  ts.TypeFlags.Any |
+  (1 satisfies ts.TypeFlags.Any) |
   Nullable |
-  ts.TypeFlags.Never |
-  ts.TypeFlags.Object |
-  ts.TypeFlags.Union |
-  ts.TypeFlags.Intersection;
+  (131072 satisfies ts.TypeFlags.Never) |
+  (524288 satisfies ts.TypeFlags.Object) |
+  (1048576 satisfies ts.TypeFlags.Union) |
+  (2097152 satisfies ts.TypeFlags.Intersection);
 export function isTypeReferenceType(type: ts.Type): type is ts.TypeReference {
   if ((type.flags & ObjectFlagsType) === 0) {
     return false;
   }
   const objectTypeFlags = (type as ts.ObjectType).objectFlags;
-  return (objectTypeFlags & ts.ObjectFlags.Reference) !== 0;
+  return (objectTypeFlags & (4 satisfies ts.ObjectFlags.Reference)) !== 0;
 }
 
 /**
  * @returns true if the type is `any`
  */
 export function isTypeAnyType(type: ts.Type): boolean {
-  if (isTypeFlagSet(type, ts.TypeFlags.Any)) {
+  if (isTypeFlagSet(type, 1 satisfies ts.TypeFlags.Any)) {
     if (type.intrinsicName === 'error') {
       log('Found an "error" any type');
     }
@@ -176,11 +178,11 @@ export function typeIsOrHasBaseType(
 export function isTypeBigIntLiteralType(
   type: ts.Type,
 ): type is ts.BigIntLiteralType {
-  return isTypeFlagSet(type, ts.TypeFlags.BigIntLiteral);
+  return isTypeFlagSet(type, 2048 satisfies ts.TypeFlags.BigIntLiteral);
 }
 
 export function isTypeTemplateLiteralType(
   type: ts.Type,
 ): type is ts.TemplateLiteralType {
-  return isTypeFlagSet(type, ts.TypeFlags.TemplateLiteral);
+  return isTypeFlagSet(type, 134217728 satisfies ts.TypeFlags.TemplateLiteral);
 }

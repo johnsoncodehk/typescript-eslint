@@ -1,4 +1,4 @@
-import * as ts from 'typescript';
+import type * as ts from 'typescript';
 
 import { isSymbolFromDefaultLibrary } from './isSymbolFromDefaultLibrary';
 
@@ -148,7 +148,9 @@ export function isBuiltinSymbolLikeRecurser(
   const symbol = type.getSymbol();
   if (
     symbol &&
-    symbol.flags & (ts.SymbolFlags.Class | ts.SymbolFlags.Interface)
+    symbol.flags &
+      ((32 satisfies ts.SymbolFlags.Class) |
+        (64 satisfies ts.SymbolFlags.Interface))
   ) {
     const checker = program.getTypeChecker();
     for (const baseType of checker.getBaseTypes(type as ts.InterfaceType)) {

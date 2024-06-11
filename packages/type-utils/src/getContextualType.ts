@@ -1,4 +1,4 @@
-import * as ts from 'typescript';
+import type * as ts from 'typescript';
 
 /**
  * Returns the contextual type of a given node.
@@ -6,6 +6,7 @@ import * as ts from 'typescript';
  * i.e. the type of a called function's parameter, or the defined type of a variable declaration
  */
 export function getContextualType(
+  ts: typeof import('typescript'),
   checker: ts.TypeChecker,
   node: ts.Expression,
 ): ts.Type | undefined {

@@ -57,7 +57,7 @@ export default createRule<[], MessageId>({
           return;
         }
 
-        const type = getConstrainedTypeAtLocation(services, argument.object);
+        const type = getConstrainedTypeAtLocation(checker, argument.object);
 
         if (!isUnderlyingTypeArray(type)) {
           return;

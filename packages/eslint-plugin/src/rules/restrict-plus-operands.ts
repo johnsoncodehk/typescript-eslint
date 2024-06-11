@@ -129,7 +129,7 @@ export default createRule<Options, MessageIds>({
 
     function getTypeConstrained(node: TSESTree.Node): ts.Type {
       return typeChecker.getBaseTypeOfLiteralType(
-        getConstrainedTypeAtLocation(services, node),
+        getConstrainedTypeAtLocation(checker, node),
       );
     }
 

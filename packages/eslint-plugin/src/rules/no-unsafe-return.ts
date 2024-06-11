@@ -85,7 +85,7 @@ export default createRule({
       }
 
       // function has an explicit return type, so ensure it's a safe return
-      const returnNodeType = getConstrainedTypeAtLocation(services, returnNode);
+      const returnNodeType = getConstrainedTypeAtLocation(checker, returnNode);
       const functionTSNode = services.esTreeNodeToTSNodeMap.get(functionNode);
 
       // function expressions will not have their return type modified based on receiver typing
@@ -95,7 +95,7 @@ export default createRule({
       let functionType =
         ts.isFunctionExpression(functionTSNode) ||
         ts.isArrowFunction(functionTSNode)
-          ? getContextualType(checker, functionTSNode)
+          ? getContextualType(ts, checker, functionTSNode)
           : services.getTypeAtLocation(functionNode);
       if (!functionType) {
         functionType = services.getTypeAtLocation(functionNode);
@@ -143,9 +143,7 @@ export default createRule({
           const thisExpression = getThisExpression(returnNode);
           if (
             thisExpression &&
-            isTypeAnyType(
-              getConstrainedTypeAtLocation(services, thisExpression),
-            )
+            isTypeAnyType(getConstrainedTypeAtLocation(checker, thisExpression))
           ) {
             messageId = 'unsafeReturnThis';
           }

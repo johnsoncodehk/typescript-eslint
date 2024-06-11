@@ -1,5 +1,5 @@
 import * as tsutils from 'ts-api-utils';
-import * as ts from 'typescript';
+import type * as ts from 'typescript';
 
 import { isTypeFlagSet } from './typeFlagUtils';
 
@@ -16,7 +16,12 @@ export function containsAllTypesByName(
   allowedNames: Set<string>,
   matchAnyInstead = false,
 ): boolean {
-  if (isTypeFlagSet(type, ts.TypeFlags.Any | ts.TypeFlags.Unknown)) {
+  if (
+    isTypeFlagSet(
+      type,
+      (1 satisfies ts.TypeFlags.Any) | (2 satisfies ts.TypeFlags.Unknown),
+    )
+  ) {
     return !allowAny;
   }
 

@@ -250,7 +250,7 @@ export default createRule({
       const receiverTsNode = services.esTreeNodeToTSNodeMap.get(receiverNode);
       const receiverType =
         comparisonType === ComparisonType.Contextual
-          ? getContextualType(checker, receiverTsNode as ts.Expression) ??
+          ? getContextualType(ts, checker, receiverTsNode as ts.Expression) ??
             services.getTypeAtLocation(receiverNode)
           : services.getTypeAtLocation(receiverNode);
       const senderType = services.getTypeAtLocation(senderNode);
@@ -268,9 +268,7 @@ export default createRule({
           const thisExpression = getThisExpression(senderNode);
           if (
             thisExpression &&
-            isTypeAnyType(
-              getConstrainedTypeAtLocation(services, thisExpression),
-            )
+            isTypeAnyType(getConstrainedTypeAtLocation(checker, thisExpression))
           ) {
             messageId = 'anyAssignmentThis';
           }

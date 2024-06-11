@@ -1,4 +1,4 @@
-import * as ts from 'typescript';
+import type * as ts from 'typescript';
 
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 export function getTokenAtPosition(
@@ -20,7 +20,8 @@ export function getTokenAtPosition(
       const end = child.getEnd();
       if (
         position < end ||
-        (position === end && child.kind === ts.SyntaxKind.EndOfFileToken)
+        (position === end &&
+          child.kind === (1 satisfies ts.SyntaxKind.EndOfFileToken))
       ) {
         queue.push(child);
         break;

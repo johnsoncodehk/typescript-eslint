@@ -36,7 +36,7 @@ export default createRule<[], MessageId>({
     function isUnderlyingTypeString(
       expression: TSESTree.Expression,
     ): expression is TSESTree.StringLiteral | TSESTree.Identifier {
-      const type = getConstrainedTypeAtLocation(services, expression);
+      const type = getConstrainedTypeAtLocation(checker, expression);
 
       const isString = (t: ts.Type): boolean => {
         return isTypeFlagSet(t, ts.TypeFlags.StringLike);

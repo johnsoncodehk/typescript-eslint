@@ -30,7 +30,7 @@ export default createRule({
         const services = getParserServices(context);
         const checker = services.program.getTypeChecker();
 
-        const type = getConstrainedTypeAtLocation(services, node.right);
+        const type = getConstrainedTypeAtLocation(checker, node.right);
 
         if (
           isTypeArrayTypeOrUnionOfArrayTypes(type, checker) ||

@@ -1,4 +1,4 @@
-import * as ts from 'typescript';
+import type * as ts from 'typescript';
 
 /**
  * Get the type name of a given type.
@@ -10,14 +10,14 @@ export function getTypeName(
   type: ts.Type,
 ): string {
   // It handles `string` and string literal types as string.
-  if ((type.flags & ts.TypeFlags.StringLike) !== 0) {
+  if ((type.flags & (402653316 satisfies ts.TypeFlags.StringLike)) !== 0) {
     return 'string';
   }
 
   // If the type is a type parameter which extends primitive string types,
   // but it was not recognized as a string like. So check the constraint
   // type of the type parameter.
-  if ((type.flags & ts.TypeFlags.TypeParameter) !== 0) {
+  if ((type.flags & (262144 satisfies ts.TypeFlags.TypeParameter)) !== 0) {
     // `type.getConstraint()` method doesn't return the constraint type of
     // the type parameter for some reason. So this gets the constraint type
     // via AST.
@@ -25,7 +25,7 @@ export function getTypeName(
     const decls = symbol?.getDeclarations();
     const typeParamDecl = decls?.[0] as ts.TypeParameterDeclaration;
     if (
-      ts.isTypeParameterDeclaration(typeParamDecl) &&
+      typeParamDecl.kind === (168 satisfies ts.SyntaxKind.TypeParameter) &&
       typeParamDecl.constraint != null
     ) {
       return getTypeName(

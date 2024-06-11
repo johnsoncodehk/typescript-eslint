@@ -91,7 +91,7 @@ export default createRule<Options, MessageId>({
           | TSESTree.TaggedTemplateExpression,
       ): void {
         const services = getParserServices(context);
-        const type = getConstrainedTypeAtLocation(services, node);
+        const type = getConstrainedTypeAtLocation(checker, node);
         if (!tsutils.isTypeFlagSet(type, ts.TypeFlags.VoidLike)) {
           // not a void expression
           return;
@@ -373,7 +373,7 @@ export default createRule<Options, MessageId>({
           ? node.argument
           : node.body;
 
-      const type = getConstrainedTypeAtLocation(services, targetNode);
+      const type = getConstrainedTypeAtLocation(checker, targetNode);
       return tsutils.isTypeFlagSet(type, ts.TypeFlags.VoidLike);
     }
   },

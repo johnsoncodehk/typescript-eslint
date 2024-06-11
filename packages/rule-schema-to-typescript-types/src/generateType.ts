@@ -20,7 +20,11 @@ const UNSUPPORTED_KEYWORDS = new Set([
   'patternProperties',
 ]);
 
-export function generateType(schema: JSONSchema4, refMap: RefMap): AST {
+export function generateType(
+  ts: typeof import('typescript'),
+  schema: JSONSchema4,
+  refMap: RefMap,
+): AST {
   const unsupportedProps = Object.keys(schema).filter(key =>
     UNSUPPORTED_KEYWORDS.has(key),
   );
@@ -119,6 +123,6 @@ export function generateType(schema: JSONSchema4, refMap: RefMap): AST {
       };
 
     case 'object':
-      return generateObjectType(schema, refMap);
+      return generateObjectType(ts, schema, refMap);
   }
 }

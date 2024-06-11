@@ -7,6 +7,7 @@ import { getCommentLines } from './getCommentLines';
 import type { AST, ObjectAST, RefMap } from './types';
 
 export function generateObjectType(
+  ts: typeof import('typescript'),
   schema: JSONSchema4ObjectSchema,
   refMap: RefMap,
 ): ObjectAST {
@@ -23,7 +24,7 @@ export function generateObjectType(
       commentLines: [],
     };
   } else if (typeof schema.additionalProperties === 'object') {
-    const indexSigType = generateType(schema.additionalProperties, refMap);
+    const indexSigType = generateType(ts, schema.additionalProperties, refMap);
     indexSignature = indexSigType;
   }
 
@@ -34,8 +35,8 @@ export function generateObjectType(
   if (schema.properties) {
     const propertyDefs = Object.entries(schema.properties);
     for (const [propName, propSchema] of propertyDefs) {
-      const propType = generateType(propSchema, refMap);
-      const sanitisedPropName = requiresQuoting(propName)
+      const propType = generateType(ts, propSchema, refMap);
+      const sanitisedPropName = requiresQuoting(ts, propName)
         ? `'${propName}'`
         : propName;
       properties.push({

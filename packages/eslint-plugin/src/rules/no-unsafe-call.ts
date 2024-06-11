@@ -49,7 +49,7 @@ export default createRule<[], MessageIds>({
       reportingNode: TSESTree.Node,
       messageId: MessageIds,
     ): void {
-      const type = getConstrainedTypeAtLocation(services, node);
+      const type = getConstrainedTypeAtLocation(checker, node);
 
       if (isTypeAnyType(type)) {
         if (!isNoImplicitThis) {
@@ -57,9 +57,7 @@ export default createRule<[], MessageIds>({
           const thisExpression = getThisExpression(node);
           if (
             thisExpression &&
-            isTypeAnyType(
-              getConstrainedTypeAtLocation(services, thisExpression),
-            )
+            isTypeAnyType(getConstrainedTypeAtLocation(checker, thisExpression))
           ) {
             messageId = 'unsafeCallThis';
           }
