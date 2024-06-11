@@ -13,7 +13,23 @@ import {
 } from '../util';
 import { getTokenAfter } from './no-unnecessary-type-assertion';
 
-export type Options = {
+export type Options = Parameters<typeof create>;
+
+/**
+ * Enforce using the nullish coalescing operator instead of logical assignments or chaining
+ */
+export function create({
+  allowRuleToRunWithoutStrictNullChecksIKnowWhatIAmDoing = false,
+  ignoreConditionalTests = false,
+  ignoreTernaryTests = false,
+  ignoreMixedLogicalExpressions = false,
+  ignorePrimitives = {
+    bigint: false,
+    boolean: false,
+    number: false,
+    string: false,
+  },
+}: {
   allowRuleToRunWithoutStrictNullChecksIKnowWhatIAmDoing?: boolean;
   ignoreConditionalTests?: boolean;
   ignoreMixedLogicalExpressions?: boolean;
@@ -26,31 +42,7 @@ export type Options = {
       }
     | true;
   ignoreTernaryTests?: boolean;
-};
-
-/**
- * Enforce using the nullish coalescing operator instead of logical assignments or chaining
- */
-export function create(
-  {
-    allowRuleToRunWithoutStrictNullChecksIKnowWhatIAmDoing,
-    ignoreConditionalTests,
-    ignoreTernaryTests,
-    ignoreMixedLogicalExpressions,
-    ignorePrimitives,
-  }: Options = {
-    allowRuleToRunWithoutStrictNullChecksIKnowWhatIAmDoing: false,
-    ignoreConditionalTests: false,
-    ignoreTernaryTests: false,
-    ignoreMixedLogicalExpressions: false,
-    ignorePrimitives: {
-      bigint: false,
-      boolean: false,
-      number: false,
-      string: false,
-    },
-  },
-): Rule {
+} = {}): Rule {
   return ({
     typescript: ts,
     sourceFile,
@@ -310,11 +302,12 @@ export function create(
         }
         /* eslint-enable @typescript-eslint/no-non-null-assertion */
 
-        const barBarOperator = getTokenAfter(node.left, sourceFile);
-        nullThrows(
-          barBarOperator.kind === node.operatorToken.kind
-            ? barBarOperator
-            : undefined,
+        const barBarOperator = nullThrows(
+          getTokenAfter(
+            node.left,
+            sourceFile,
+            child => child.kind === node.operatorToken.kind,
+          ),
           NullThrowsReasons.MissingToken('operator', '||'),
         );
 

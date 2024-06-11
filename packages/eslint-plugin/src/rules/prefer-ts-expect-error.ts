@@ -1,6 +1,8 @@
 import type { Rule } from '@tsslint/types';
 import type * as ts from 'typescript';
 
+export type Options = Parameters<typeof create>;
+
 /**
  * Enforce using `@ts-expect-error` over `@ts-ignore`
  */

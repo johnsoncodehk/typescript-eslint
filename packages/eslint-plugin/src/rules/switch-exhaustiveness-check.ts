@@ -1,104 +1,53 @@
-import type { TSESLint, TSESTree } from '@typescript-eslint/utils';
+import type { Rule } from '@tsslint/types';
 import * as tsutils from 'ts-api-utils';
 import * as ts from 'typescript';
 
 import {
-  createRule,
   getConstrainedTypeAtLocation,
-  getParserServices,
-  isClosingBraceToken,
-  isOpeningBraceToken,
   nullThrows,
   NullThrowsReasons,
   requiresQuoting,
 } from '../util';
 
-interface SwitchMetadata {
-  readonly symbolName: string | undefined;
-  readonly defaultCase: TSESTree.SwitchCase | undefined;
-  readonly missingLiteralBranchTypes: ts.Type[];
-  readonly containsNonLiteralType: boolean;
-}
+export type Options = Parameters<typeof create>;
 
-type Options = [
-  {
-    /**
-     * If `true`, allow `default` cases on switch statements with exhaustive
-     * cases.
-     *
-     * @default true
-     */
-    allowDefaultCaseForExhaustiveSwitch?: boolean;
+export function create({
+  allowDefaultCaseForExhaustiveSwitch = true,
+  requireDefaultForNonUnion = false,
+}: {
+  /**
+   * If `true`, allow `default` cases on switch statements with exhaustive
+   * cases.
+   *
+   * @default true
+   */
+  allowDefaultCaseForExhaustiveSwitch?: boolean;
 
-    /**
-     * If `true`, require a `default` clause for switches on non-union types.
-     *
-     * @default false
-     */
-    requireDefaultForNonUnion?: boolean;
-  },
-];
+  /**
+   * If `true`, require a `default` clause for switches on non-union types.
+   *
+   * @default false
+   */
+  requireDefaultForNonUnion?: boolean;
+} = {}): Rule {
+  return ({
+    typescript: ts,
+    sourceFile,
+    languageService,
+    reportSuggestion: report,
+  }) => {
+    const program = languageService.getProgram()!;
+    const checker = program.getTypeChecker();
+    const compilerOptions = program.getCompilerOptions();
 
-type MessageIds =
-  | 'switchIsNotExhaustive'
-  | 'dangerousDefaultCase'
-  | 'addMissingCases';
-
-export default createRule<Options, MessageIds>({
-  name: 'switch-exhaustiveness-check',
-  meta: {
-    type: 'suggestion',
-    docs: {
-      description: 'Require switch-case statements to be exhaustive',
-      requiresTypeChecking: true,
-    },
-    hasSuggestions: true,
-    schema: [
-      {
-        type: 'object',
-        properties: {
-          allowDefaultCaseForExhaustiveSwitch: {
-            description: `If 'true', allow 'default' cases on switch statements with exhaustive cases.`,
-            type: 'boolean',
-          },
-          requireDefaultForNonUnion: {
-            description: `If 'true', require a 'default' clause for switches on non-union types.`,
-            type: 'boolean',
-          },
-        },
-        additionalProperties: false,
-      },
-    ],
-    messages: {
-      switchIsNotExhaustive:
-        'Switch is not exhaustive. Cases not matched: {{missingBranches}}',
-      dangerousDefaultCase:
-        'The switch statement is exhaustive, so the default case is unnecessary.',
-      addMissingCases: 'Add branches for missing cases.',
-    },
-  },
-  defaultOptions: [
-    {
-      allowDefaultCaseForExhaustiveSwitch: true,
-      requireDefaultForNonUnion: false,
-    },
-  ],
-  create(
-    context,
-    [{ allowDefaultCaseForExhaustiveSwitch, requireDefaultForNonUnion }],
-  ) {
-    const services = getParserServices(context);
-    const checker = services.program.getTypeChecker();
-    const compilerOptions = services.program.getCompilerOptions();
-
-    function getSwitchMetadata(node: TSESTree.SwitchStatement): SwitchMetadata {
-      const defaultCase = node.cases.find(
-        switchCase => switchCase.test == null,
-      );
+    function getSwitchMetadata(node: ts.SwitchStatement): SwitchMetadata {
+      const defaultCase = node.caseBlock.clauses.find(
+        switchCase => switchCase.kind === ts.SyntaxKind.DefaultClause,
+      ) as ts.DefaultClause | undefined;
 
       const discriminantType = getConstrainedTypeAtLocation(
-        services,
-        node.discriminant,
+        checker,
+        node.expression,
       );
 
       const symbolName = discriminantType.getSymbol()?.escapedName as
@@ -109,16 +58,16 @@ export default createRule<Options, MessageIds>({
         doesTypeContainNonLiteralType(discriminantType);
 
       const caseTypes = new Set<ts.Type>();
-      for (const switchCase of node.cases) {
+      for (const switchCase of node.caseBlock.clauses) {
         // If the `test` property of the switch case is `null`, then we are on a
         // `default` case.
-        if (switchCase.test == null) {
+        if (switchCase.kind === ts.SyntaxKind.DefaultClause) {
           continue;
         }
 
         const caseType = getConstrainedTypeAtLocation(
-          services,
-          switchCase.test,
+          checker,
+          switchCase.expression,
         );
         caseTypes.add(caseType);
       }
@@ -149,7 +98,7 @@ export default createRule<Options, MessageIds>({
     }
 
     function checkSwitchExhaustive(
-      node: TSESTree.SwitchStatement,
+      node: ts.SwitchStatement,
       switchMetadata: SwitchMetadata,
     ): void {
       const { missingLiteralBranchTypes, symbolName, defaultCase } =
@@ -159,48 +108,51 @@ export default createRule<Options, MessageIds>({
       // would disqualify the switch statement from having cases that exactly
       // match the members of a union.
       if (missingLiteralBranchTypes.length > 0 && defaultCase === undefined) {
-        context.report({
-          node: node.discriminant,
-          messageId: 'switchIsNotExhaustive',
-          data: {
-            missingBranches: missingLiteralBranchTypes
-              .map(missingType =>
-                tsutils.isTypeFlagSet(missingType, ts.TypeFlags.ESSymbolLike)
-                  ? `typeof ${missingType.getSymbol()?.escapedName as string}`
-                  : checker.typeToString(missingType),
-              )
-              .join(' | '),
+        const missingBranches = missingLiteralBranchTypes
+          .map(missingType =>
+            tsutils.isTypeFlagSet(missingType, ts.TypeFlags.ESSymbolLike)
+              ? `typeof ${missingType.getSymbol()?.escapedName as string}`
+              : checker.typeToString(missingType),
+          )
+          .join(' | ');
+        report(
+          `Switch is not exhaustive. Cases not matched: ${missingBranches}`,
+          node.getStart(),
+          node.getEnd(),
+        ).withFix('Add branches for missing cases.', () => [
+          {
+            fileName: sourceFile.fileName,
+            textChanges: fixSwitch(
+              node,
+              missingLiteralBranchTypes,
+              symbolName?.toString(),
+            ),
           },
-          suggest: [
-            {
-              messageId: 'addMissingCases',
-              fix(fixer): TSESLint.RuleFix | null {
-                return fixSwitch(
-                  fixer,
-                  node,
-                  missingLiteralBranchTypes,
-                  symbolName?.toString(),
-                );
-              },
-            },
-          ],
-        });
+        ]);
       }
     }
 
     function fixSwitch(
-      fixer: TSESLint.RuleFixer,
-      node: TSESTree.SwitchStatement,
+      node: ts.SwitchStatement,
       missingBranchTypes: (ts.Type | null)[], // null means default branch
       symbolName?: string,
-    ): TSESLint.RuleFix {
+    ): ts.TextChange[] {
       const lastCase =
-        node.cases.length > 0 ? node.cases[node.cases.length - 1] : null;
+        node.caseBlock.clauses.length > 0
+          ? node.caseBlock.clauses[node.caseBlock.clauses.length - 1]
+          : null;
       const caseIndent = lastCase
-        ? ' '.repeat(lastCase.loc.start.column)
+        ? ' '.repeat(
+            sourceFile.getLineAndCharacterOfPosition(
+              lastCase.getStart(sourceFile),
+            ).character,
+          )
         : // If there are no cases, use indentation of the switch statement and
           // leave it to the user to format it correctly.
-          ' '.repeat(node.loc.start.column);
+          ' '.repeat(
+            sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile))
+              .character,
+          );
 
       const missingCases = [];
       for (const missingBranchType of missingBranchTypes) {
@@ -221,7 +173,11 @@ export default createRule<Options, MessageIds>({
         if (
           symbolName &&
           (missingBranchName || missingBranchName === '') &&
-          requiresQuoting(missingBranchName.toString(), compilerOptions.target)
+          requiresQuoting(
+            ts,
+            missingBranchName.toString(),
+            compilerOptions.target,
+          )
         ) {
           const escapedBranchName = missingBranchName
             .replaceAll("'", "\\'")
@@ -243,29 +199,42 @@ export default createRule<Options, MessageIds>({
         .join('\n');
 
       if (lastCase) {
-        return fixer.insertTextAfter(lastCase, `\n${fixString}`);
+        return [
+          {
+            newText: `\n${fixString}`,
+            span: {
+              start: lastCase.getStart(sourceFile),
+              length: 0,
+            },
+          },
+        ];
       }
 
       // There were no existing cases.
-      const openingBrace = nullThrows(
-        context.sourceCode.getTokenAfter(
-          node.discriminant,
-          isOpeningBraceToken,
-        ),
+      const openingBrace = node.caseBlock.getFirstToken(sourceFile)!;
+      nullThrows(
+        openingBrace?.kind === ts.SyntaxKind.OpenBraceToken
+          ? openingBrace
+          : undefined,
         NullThrowsReasons.MissingToken('{', 'discriminant'),
       );
-      const closingBrace = nullThrows(
-        context.sourceCode.getTokenAfter(
-          node.discriminant,
-          isClosingBraceToken,
-        ),
+      const closingBrace = node.caseBlock.getLastToken(sourceFile)!;
+      nullThrows(
+        closingBrace?.kind === ts.SyntaxKind.CloseBraceToken
+          ? openingBrace
+          : undefined,
         NullThrowsReasons.MissingToken('}', 'discriminant'),
       );
 
-      return fixer.replaceTextRange(
-        [openingBrace.range[0], closingBrace.range[1]],
-        ['{', fixString, `${caseIndent}}`].join('\n'),
-      );
+      return [
+        {
+          newText: ['{', fixString, `${caseIndent}}`].join('\n'),
+          span: {
+            start: openingBrace.getStart(sourceFile),
+            length: closingBrace.getEnd() - openingBrace.getStart(sourceFile),
+          },
+        },
+      ];
     }
 
     function checkSwitchUnnecessaryDefaultCase(
@@ -283,15 +252,16 @@ export default createRule<Options, MessageIds>({
         defaultCase !== undefined &&
         !containsNonLiteralType
       ) {
-        context.report({
-          node: defaultCase,
-          messageId: 'dangerousDefaultCase',
-        });
+        report(
+          'The switch statement is exhaustive, so the default case is unnecessary.',
+          defaultCase.getStart(sourceFile),
+          defaultCase.getEnd(),
+        );
       }
     }
 
     function checkSwitchNoUnionDefaultCase(
-      node: TSESTree.SwitchStatement,
+      node: ts.SwitchStatement,
       switchMetadata: SwitchMetadata,
     ): void {
       if (!requireDefaultForNonUnion) {
@@ -301,33 +271,40 @@ export default createRule<Options, MessageIds>({
       const { defaultCase, containsNonLiteralType } = switchMetadata;
 
       if (containsNonLiteralType && defaultCase === undefined) {
-        context.report({
-          node: node.discriminant,
-          messageId: 'switchIsNotExhaustive',
-          data: { missingBranches: 'default' },
-          suggest: [
-            {
-              messageId: 'addMissingCases',
-              fix(fixer): TSESLint.RuleFix {
-                return fixSwitch(fixer, node, [null]);
-              },
-            },
-          ],
-        });
+        const missingBranches = 'default';
+        report(
+          `Switch is not exhaustive. Cases not matched: ${missingBranches}`,
+          node.expression.getStart(sourceFile),
+          node.getEnd(),
+        ).withFix('Add branches for missing cases.', () => [
+          {
+            fileName: sourceFile.fileName,
+            textChanges: fixSwitch(node, [null]),
+          },
+        ]);
       }
     }
 
-    return {
-      SwitchStatement(node): void {
+    sourceFile.forEachChild(function cb(node) {
+      if (ts.isSwitchStatement(node)) {
         const switchMetadata = getSwitchMetadata(node);
 
         checkSwitchExhaustive(node, switchMetadata);
         checkSwitchUnnecessaryDefaultCase(switchMetadata);
         checkSwitchNoUnionDefaultCase(node, switchMetadata);
-      },
-    };
-  },
-});
+      }
+
+      node.forEachChild(cb);
+    });
+  };
+}
+
+interface SwitchMetadata {
+  readonly symbolName: string | undefined;
+  readonly defaultCase: ts.DefaultClause | undefined;
+  readonly missingLiteralBranchTypes: ts.Type[];
+  readonly containsNonLiteralType: boolean;
+}
 
 function isTypeLiteralLikeType(type: ts.Type): boolean {
   return tsutils.isTypeFlagSet(
