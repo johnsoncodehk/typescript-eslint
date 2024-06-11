@@ -12,6 +12,8 @@ import {
   NullThrowsReasons,
 } from '../util';
 
+export type Options = Parameters<typeof create>;
+
 /**
  * Disallow type assertions that do not change the type of an expression
  */
@@ -206,7 +208,7 @@ export function create(
           // we know it's a nullable type
           // so figure out if the variable is used in a place that accepts nullable types
 
-          const contextualType = getContextualType(checker, originalNode);
+          const contextualType = getContextualType(ts, checker, originalNode);
           if (contextualType) {
             // in strict mode you can't assign null to undefined, so we have to make sure that
             // the two types share a nullable type
@@ -291,18 +293,20 @@ export function create(
             node.getEnd(),
           ).withFix('[No Description]', () => {
             if (ts.isTypeAssertionExpression(node)) {
-              const openingAngleBracket = getTokenBefore(node.type, sourceFile);
-              nullThrows(
-                openingAngleBracket.kind === ts.SyntaxKind.LessThanToken
-                  ? openingAngleBracket
-                  : undefined,
+              const openingAngleBracket = nullThrows(
+                getTokenBefore(
+                  node.type,
+                  sourceFile,
+                  node => node.kind === ts.SyntaxKind.LessThanToken,
+                ),
                 NullThrowsReasons.MissingToken('<', 'type annotation'),
               );
-              const closingAngleBracket = getTokenAfter(node.type, sourceFile);
-              nullThrows(
-                openingAngleBracket.kind === ts.SyntaxKind.GreaterThanToken
-                  ? openingAngleBracket
-                  : undefined,
+              const closingAngleBracket = nullThrows(
+                getTokenAfter(
+                  node.type,
+                  sourceFile,
+                  node => node.kind === ts.SyntaxKind.GreaterThanToken,
+                ),
                 NullThrowsReasons.MissingToken('>', 'type annotation'),
               );
 
@@ -326,9 +330,12 @@ export function create(
               ];
             }
             // `as` is always present in TSAsExpression
-            const asToken = getTokenAfter(node.expression, sourceFile);
-            nullThrows(
-              asToken.kind === ts.SyntaxKind.AsKeyword ? asToken : undefined,
+            const asToken = nullThrows(
+              getTokenAfter(
+                node.expression,
+                sourceFile,
+                node => node.kind === ts.SyntaxKind.AsKeyword,
+              ),
               NullThrowsReasons.MissingToken('>', 'type annotation'),
             );
 
@@ -359,12 +366,34 @@ export function create(
   };
 }
 
-function getTokenBefore(node: ts.Node, sourceFile: ts.SourceFile) {
+export function getTokenBefore(
+  node: ts.Node,
+  sourceFile: ts.SourceFile,
+  condition: (node: ts.Node) => boolean,
+) {
   const children = node.parent.getChildren(sourceFile);
-  return children[children.indexOf(node) - 1];
+  for (let i = children.indexOf(node) - 1; i >= 0; i--) {
+    if (!condition || condition(node)) {
+      return node;
+    }
+  }
+  return undefined;
 }
 
-function getTokenAfter(node: ts.Node, sourceFile: ts.SourceFile) {
+export function getTokenAfter(
+  node: ts.Node,
+  sourceFile: ts.SourceFile,
+  condition: (node: ts.Node) => boolean,
+) {
   const children = node.parent.getChildren(sourceFile);
-  return children[children.indexOf(node) + 1];
+  for (
+    let i = children.indexOf(node) + 1;
+    i < node.parent.getChildCount();
+    i++
+  ) {
+    if (!condition || condition(node)) {
+      return node;
+    }
+  }
+  return undefined;
 }
