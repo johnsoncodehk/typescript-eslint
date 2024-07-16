@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import ts from 'typescript';
 import tmp from 'tmp';
 
 import { clearCaches } from '../../src/clear-caches';
@@ -76,7 +77,7 @@ function parseFile(
   relative?: boolean,
   ignoreTsconfigRootDir?: boolean,
 ): void {
-  parseAndGenerateServices(CONTENTS[filename], {
+  parseAndGenerateServices(ts, CONTENTS[filename], {
     project: './tsconfig.json',
     tsconfigRootDir: ignoreTsconfigRootDir ? undefined : tmpDir,
     filePath: relative

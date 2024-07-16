@@ -1,5 +1,5 @@
 import semver from 'semver';
-import * as ts from 'typescript';
+import type * as ts from 'typescript';
 
 import type { ParseSettings } from './index';
 
@@ -13,20 +13,21 @@ const SUPPORTED_TYPESCRIPT_VERSIONS = '>=4.7.4 <5.5.0';
  * List them all separately here, so we can automatically create the full string
  */
 const SUPPORTED_PRERELEASE_RANGES: string[] = [];
-const ACTIVE_TYPESCRIPT_VERSION = ts.version;
-const isRunningSupportedTypeScriptVersion = semver.satisfies(
-  ACTIVE_TYPESCRIPT_VERSION,
-  [SUPPORTED_TYPESCRIPT_VERSIONS]
-    .concat(SUPPORTED_PRERELEASE_RANGES)
-    .join(' || '),
-);
 
 let warnedAboutTSVersion = false;
 
 export function warnAboutTSVersion(
+  ts: typeof import('typescript'),
   parseSettings: ParseSettings,
   passedLoggerFn: boolean,
 ): void {
+  const ACTIVE_TYPESCRIPT_VERSION = ts.version;
+  const isRunningSupportedTypeScriptVersion = semver.satisfies(
+    ACTIVE_TYPESCRIPT_VERSION,
+    [SUPPORTED_TYPESCRIPT_VERSIONS]
+      .concat(SUPPORTED_PRERELEASE_RANGES)
+      .join(' || '),
+  );
   if (isRunningSupportedTypeScriptVersion || warnedAboutTSVersion) {
     return;
   }

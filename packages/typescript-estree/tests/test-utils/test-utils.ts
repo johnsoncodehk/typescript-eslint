@@ -6,10 +6,11 @@ import type {
 import { parse as parserParse, parseAndGenerateServices } from '../../src';
 
 export function parseCodeAndGenerateServices(
+  ts: typeof import('typescript'),
   code: string,
   config: TSESTreeOptions,
 ): ParseAndGenerateServicesResult<TSESTreeOptions> {
-  return parseAndGenerateServices(code, config);
+  return parseAndGenerateServices(ts, code, config);
 }
 
 /**
@@ -21,6 +22,7 @@ export function parseCodeAndGenerateServices(
  * @returns callback for Jest it() block
  */
 export function createSnapshotTestBlock(
+  ts: typeof import('typescript'),
   code: string,
   config: TSESTreeOptions,
   generateServices?: true,
@@ -30,8 +32,8 @@ export function createSnapshotTestBlock(
    */
   function parse(): TSESTree.Program {
     const ast = generateServices
-      ? parseAndGenerateServices(code, config).ast
-      : parserParse(code, config);
+      ? parseAndGenerateServices(ts, code, config).ast
+      : parserParse(ts, code, config);
     return deeplyCopy(ast);
   }
 

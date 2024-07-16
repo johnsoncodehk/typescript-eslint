@@ -1,5 +1,5 @@
 import * as semver from 'semver';
-import * as ts from 'typescript';
+import type * as ts from 'typescript';
 
 function semverCheck(version: string): boolean {
   return semver.satisfies(

@@ -1,10 +1,11 @@
-import * as ts from 'typescript';
+import type * as ts from 'typescript';
 
 import { typescriptVersionIsAtLeast } from './version-check';
 
 const isAtLeast48 = typescriptVersionIsAtLeast['4.8'];
 
 export function getModifiers(
+  ts: typeof import('typescript'),
   node: ts.Node | null | undefined,
   includeIllegalModifiers = false,
 ): ts.Modifier[] | undefined {
@@ -32,6 +33,7 @@ export function getModifiers(
 }
 
 export function getDecorators(
+  ts: typeof import('typescript'),
   node: ts.Node | null | undefined,
   includeIllegalDecorators = false,
 ): ts.Decorator[] | undefined {

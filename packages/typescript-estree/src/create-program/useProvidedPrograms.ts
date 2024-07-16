@@ -1,7 +1,7 @@
 import debug from 'debug';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as ts from 'typescript';
+import type * as ts from 'typescript';
 
 import type { ASTAndDefiniteProgram } from './shared';
 import { CORE_COMPILER_OPTIONS, getAstFromProgram } from './shared';
@@ -53,6 +53,7 @@ function useProvidedPrograms(
  * @param projectDirectory the project directory to use as the CWD, defaults to `process.cwd()`
  */
 function createProgramFromConfigFile(
+  ts: typeof import('typescript'),
   configFile: string,
   projectDirectory?: string,
 ): ts.Program {
@@ -68,7 +69,7 @@ function createProgramFromConfigFile(
     CORE_COMPILER_OPTIONS,
     {
       onUnRecoverableConfigFileDiagnostic: diag => {
-        throw new Error(formatDiagnostics([diag])); // ensures that `parsed` is defined.
+        throw new Error(formatDiagnostics(ts, [diag])); // ensures that `parsed` is defined.
       },
       fileExists: fs.existsSync,
       getCurrentDirectory: () =>
@@ -82,13 +83,16 @@ function createProgramFromConfigFile(
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
   const result = parsed!;
   if (result.errors.length) {
-    throw new Error(formatDiagnostics(result.errors));
+    throw new Error(formatDiagnostics(ts, result.errors));
   }
   const host = ts.createCompilerHost(result.options, true);
   return ts.createProgram(result.fileNames, result.options, host);
 }
 
-function formatDiagnostics(diagnostics: ts.Diagnostic[]): string | undefined {
+function formatDiagnostics(
+  ts: typeof import('typescript'),
+  diagnostics: ts.Diagnostic[],
+): string | undefined {
   return ts.formatDiagnostics(diagnostics, {
     getCanonicalFileName: f => f,
     getCurrentDirectory: process.cwd,

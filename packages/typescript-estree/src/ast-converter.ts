@@ -9,6 +9,7 @@ import { simpleTraverse } from './simple-traverse';
 import type { TSESTree } from './ts-estree';
 
 export function astConverter(
+  ts: typeof import('typescript'),
   ast: SourceFile,
   parseSettings: ParseSettings,
   shouldPreserveNodeMaps: boolean,
@@ -25,7 +26,7 @@ export function astConverter(
   /**
    * Recursively convert the TypeScript AST into an ESTree-compatible AST
    */
-  const instance = new Converter(ast, {
+  const instance = new Converter(ts, ast, {
     allowInvalidAST: parseSettings.allowInvalidAST,
     errorOnUnknownASTType: parseSettings.errorOnUnknownASTType,
     shouldPreserveNodeMaps,
@@ -59,7 +60,7 @@ export function astConverter(
    * Optionally convert and include all tokens in the AST
    */
   if (parseSettings.tokens) {
-    estree.tokens = convertTokens(ast);
+    estree.tokens = convertTokens(ts, ast);
   }
 
   /**

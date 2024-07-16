@@ -1,5 +1,6 @@
 import type { CacheDurationSeconds } from '@typescript-eslint/types';
 import debug from 'debug';
+import * as ts from 'typescript';
 import * as globbyModule from 'globby';
 import { join, resolve } from 'path';
 import type * as typescriptModule from 'typescript';
@@ -83,16 +84,16 @@ describe('parseAndGenerateServices', () => {
     };
 
     it('should not impact the use of parse()', () => {
-      const resultWithNoOptionSet = parser.parse(code, baseConfig);
-      const resultWithOptionSetToTrue = parser.parse(code, {
+      const resultWithNoOptionSet = parser.parse(ts, code, baseConfig);
+      const resultWithOptionSetToTrue = parser.parse(ts, code, {
         ...baseConfig,
         preserveNodeMaps: true,
       });
-      const resultWithOptionSetToFalse = parser.parse(code, {
+      const resultWithOptionSetToFalse = parser.parse(ts, code, {
         ...baseConfig,
         preserveNodeMaps: false,
       });
-      const resultWithOptionSetExplicitlyToUndefined = parser.parse(code, {
+      const resultWithOptionSetExplicitlyToUndefined = parser.parse(ts, code, {
         ...baseConfig,
         preserveNodeMaps: undefined,
       });
@@ -105,7 +106,7 @@ describe('parseAndGenerateServices', () => {
     });
 
     it('should preserve node maps by default for parseAndGenerateServices()', () => {
-      const noOptionSet = parser.parseAndGenerateServices(code, baseConfig);
+      const noOptionSet = parser.parseAndGenerateServices(ts, code, baseConfig);
 
       expect(noOptionSet.services.esTreeNodeToTSNodeMap).toEqual(
         expect.any(WeakMap),
@@ -115,6 +116,7 @@ describe('parseAndGenerateServices', () => {
       );
 
       const withProjectNoOptionSet = parser.parseAndGenerateServices(
+        ts,
         code,
         projectConfig,
       );
@@ -129,7 +131,7 @@ describe('parseAndGenerateServices', () => {
 
     function checkNodeMaps(setting: boolean): void {
       it('without project', () => {
-        const parseResult = parser.parseAndGenerateServices(code, {
+        const parseResult = parser.parseAndGenerateServices(ts, code, {
           ...baseConfig,
           preserveNodeMaps: setting,
         });
@@ -142,7 +144,7 @@ describe('parseAndGenerateServices', () => {
       });
 
       it('with project', () => {
-        const parseResult = parser.parseAndGenerateServices(code, {
+        const parseResult = parser.parseAndGenerateServices(ts, code, {
           ...projectConfig,
           preserveNodeMaps: setting,
         });
@@ -197,7 +199,7 @@ describe('parseAndGenerateServices', () => {
           | undefined;
         // eslint-disable-next-line jest/valid-expect
         const exp = expect(() => {
-          result = parser.parseAndGenerateServices(code, {
+          result = parser.parseAndGenerateServices(ts, code, {
             ...config,
             jsx: jsxSetting,
             filePath: join(FIXTURES_DIR, `file${ext}`),
@@ -356,7 +358,7 @@ describe('parseAndGenerateServices', () => {
         (filePath: string, extraFileExtensions: string[] = ['.vue']) =>
         (): void => {
           try {
-            parser.parseAndGenerateServices(code, {
+            parser.parseAndGenerateServices(ts, code, {
               ...config,
               extraFileExtensions,
               filePath: join(PROJECT_DIR, filePath),
@@ -494,7 +496,7 @@ describe('parseAndGenerateServices', () => {
           };
           const testParse = (filePath: string) => (): void => {
             try {
-              parser.parseAndGenerateServices(code, {
+              parser.parseAndGenerateServices(ts, code, {
                 ...config,
                 filePath: join(PROJECT_DIR, filePath),
               });
@@ -528,14 +530,14 @@ describe('parseAndGenerateServices', () => {
     });
 
     it("shouldn't turn on debugger if no options were provided", () => {
-      parser.parseAndGenerateServices('const x = 1;', {
+      parser.parseAndGenerateServices(ts, 'const x = 1;', {
         debugLevel: [],
       });
       expect(debugEnable).not.toHaveBeenCalled();
     });
 
     it('should turn on eslint debugger', () => {
-      parser.parseAndGenerateServices('const x = 1;', {
+      parser.parseAndGenerateServices(ts, 'const x = 1;', {
         debugLevel: ['eslint'],
       });
       expect(debugEnable).toHaveBeenCalledTimes(1);
@@ -543,7 +545,7 @@ describe('parseAndGenerateServices', () => {
     });
 
     it('should turn on typescript-eslint debugger', () => {
-      parser.parseAndGenerateServices('const x = 1;', {
+      parser.parseAndGenerateServices(ts, 'const x = 1;', {
         debugLevel: ['typescript-eslint'],
       });
       expect(debugEnable).toHaveBeenCalledTimes(1);
@@ -551,7 +553,7 @@ describe('parseAndGenerateServices', () => {
     });
 
     it('should turn on both eslint and typescript-eslint debugger', () => {
-      parser.parseAndGenerateServices('const x = 1;', {
+      parser.parseAndGenerateServices(ts, 'const x = 1;', {
         debugLevel: ['typescript-eslint', 'eslint'],
       });
       expect(debugEnable).toHaveBeenCalledTimes(1);
@@ -563,7 +565,7 @@ describe('parseAndGenerateServices', () => {
     if (process.env.TYPESCRIPT_ESLINT_EXPERIMENTAL_TSSERVER !== 'true') {
       it('should turn on typescript debugger', () => {
         expect(() =>
-          parser.parseAndGenerateServices('const x = 1;', {
+          parser.parseAndGenerateServices(ts, 'const x = 1;', {
             debugLevel: ['typescript'],
             filePath: './path-that-doesnt-exist.ts',
             project: ['./tsconfig-that-doesnt-exist.json'],
@@ -603,7 +605,7 @@ describe('parseAndGenerateServices', () => {
           projectFolderIgnoreList?: TSESTreeOptions['projectFolderIgnoreList'],
         ) =>
         (): void => {
-          parser.parseAndGenerateServices(code, {
+          parser.parseAndGenerateServices(ts, code, {
             ...config,
             projectFolderIgnoreList,
             filePath: join(PROJECT_DIR, filePath, './file.ts'),
@@ -627,7 +629,7 @@ describe('parseAndGenerateServices', () => {
     describe('cacheLifetime', () => {
       describe('glob', () => {
         function doParse(lifetime: CacheDurationSeconds): void {
-          parser.parseAndGenerateServices('const x = 1', {
+          parser.parseAndGenerateServices(ts, 'const x = 1', {
             cacheLifetime: {
               glob: lifetime,
             },

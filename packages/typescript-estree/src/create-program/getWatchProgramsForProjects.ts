@@ -1,6 +1,6 @@
 import debug from 'debug';
 import fs from 'fs';
-import * as ts from 'typescript';
+import type * as ts from 'typescript';
 
 import type { ParseSettings } from '../parseSettings';
 import { getCodeText } from '../source-files';
@@ -62,13 +62,17 @@ function clearWatchCaches(): void {
 }
 
 function saveWatchCallback(
+  ts: typeof import('typescript'),
   trackingMap: Map<string, Set<ts.FileWatcherCallback>>,
 ) {
   return (
     fileName: string,
     callback: ts.FileWatcherCallback,
   ): ts.FileWatcher => {
-    const normalizedFileName = getCanonicalFileName(fileName);
+    const normalizedFileName = getCanonicalFileName(
+      ts.sys.useCaseSensitiveFileNames ?? false,
+      fileName,
+    );
     const watchers = ((): Set<ts.FileWatcherCallback> => {
       let watchers = trackingMap.get(normalizedFileName);
       if (!watchers) {
@@ -98,17 +102,8 @@ const currentLintOperationState: {
   filePath: '' as CanonicalPath,
 };
 
-/**
- * Appropriately report issues found when reading a config file
- * @param diagnostic The diagnostic raised when creating a program
- */
-function diagnosticReporter(diagnostic: ts.Diagnostic): void {
-  throw new Error(
-    ts.flattenDiagnosticMessageText(diagnostic.messageText, ts.sys.newLine),
-  );
-}
-
 function updateCachedFileList(
+  ts: typeof import('typescript'),
   tsconfigPath: CanonicalPath,
   program: ts.Program,
   parseSettings: ParseSettings,
@@ -116,9 +111,25 @@ function updateCachedFileList(
   const fileList =
     parseSettings.EXPERIMENTAL_useSourceOfProjectReferenceRedirect
       ? new Set(
-          program.getSourceFiles().map(sf => getCanonicalFileName(sf.fileName)),
+          program
+            .getSourceFiles()
+            .map(sf =>
+              getCanonicalFileName(
+                ts.sys.useCaseSensitiveFileNames ?? false,
+                sf.fileName,
+              ),
+            ),
         )
-      : new Set(program.getRootFileNames().map(f => getCanonicalFileName(f)));
+      : new Set(
+          program
+            .getRootFileNames()
+            .map(f =>
+              getCanonicalFileName(
+                ts.sys.useCaseSensitiveFileNames ?? false,
+                f,
+              ),
+            ),
+        );
   programFileListCache.set(tsconfigPath, fileList);
   return fileList;
 }
@@ -129,9 +140,13 @@ function updateCachedFileList(
  * @returns The programs corresponding to the supplied tsconfig paths
  */
 function getWatchProgramsForProjects(
+  ts: typeof import('typescript'),
   parseSettings: ParseSettings,
 ): ts.Program[] {
-  const filePath = getCanonicalFileName(parseSettings.filePath);
+  const filePath = getCanonicalFileName(
+    ts.sys.useCaseSensitiveFileNames ?? false,
+    parseSettings.filePath,
+  );
   const results = [];
 
   // preserve reference to code and file being linted
@@ -140,14 +155,14 @@ function getWatchProgramsForProjects(
 
   // Update file version if necessary
   const fileWatchCallbacks = fileWatchCallbackTrackingMap.get(filePath);
-  const codeHash = createHash(getCodeText(parseSettings.code));
+  const codeHash = createHash(ts, getCodeText(parseSettings.code));
   if (
     parsedFilesSeenHash.get(filePath) !== codeHash &&
     fileWatchCallbacks &&
     fileWatchCallbacks.size > 0
   ) {
     fileWatchCallbacks.forEach(cb =>
-      cb(filePath, ts.FileWatcherEventKind.Changed),
+      cb(filePath, 1 satisfies ts.FileWatcherEventKind.Changed),
     );
   }
 
@@ -171,6 +186,7 @@ function getWatchProgramsForProjects(
     if (!fileList) {
       updatedProgram = existingWatch.getProgram().getProgram();
       fileList = updateCachedFileList(
+        ts,
         tsconfigPath,
         updatedProgram,
         parseSettings,
@@ -202,6 +218,7 @@ function getWatchProgramsForProjects(
 
     if (existingWatch) {
       const updatedProgram = maybeInvalidateProgram(
+        ts,
         existingWatch,
         filePath,
         tsconfigPath[0],
@@ -215,6 +232,7 @@ function getWatchProgramsForProjects(
 
       // cache and check the file list
       const fileList = updateCachedFileList(
+        ts,
         tsconfigPath[0],
         updatedProgram,
         parseSettings,
@@ -229,7 +247,7 @@ function getWatchProgramsForProjects(
       continue;
     }
 
-    const programWatch = createWatchProgram(tsconfigPath[1], parseSettings);
+    const programWatch = createWatchProgram(ts, tsconfigPath[1], parseSettings);
     knownWatchProgramMap.set(tsconfigPath[0], programWatch);
 
     const program = programWatch.getProgram().getProgram();
@@ -238,6 +256,7 @@ function getWatchProgramsForProjects(
 
     // cache and check the file list
     const fileList = updateCachedFileList(
+      ts,
       tsconfigPath[0],
       program,
       parseSettings,
@@ -255,6 +274,7 @@ function getWatchProgramsForProjects(
 }
 
 function createWatchProgram(
+  ts: typeof import('typescript'),
   tsconfigPath: string,
   parseSettings: ParseSettings,
 ): ts.WatchOfConfigFile<ts.BuilderProgram> {
@@ -276,13 +296,16 @@ function createWatchProgram(
   // ensure readFile reads the code being linted instead of the copy on disk
   const oldReadFile = watchCompilerHost.readFile;
   watchCompilerHost.readFile = (filePathIn, encoding): string | undefined => {
-    const filePath = getCanonicalFileName(filePathIn);
+    const filePath = getCanonicalFileName(
+      ts.sys.useCaseSensitiveFileNames ?? false,
+      filePathIn,
+    );
     const fileContent =
       filePath === currentLintOperationState.filePath
         ? getCodeText(currentLintOperationState.code)
         : oldReadFile(filePath, encoding);
     if (fileContent !== undefined) {
-      parsedFilesSeenHash.set(filePath, createHash(fileContent));
+      parsedFilesSeenHash.set(filePath, createHash(ts, fileContent));
     }
     return fileContent;
   };
@@ -314,8 +337,12 @@ function createWatchProgram(
    * When files are created (or renamed), we won't know about them because we have no filesystem watchers attached.
    * We use the folder watchers to tell typescript it needs to go and find new files in the project folders.
    */
-  watchCompilerHost.watchFile = saveWatchCallback(fileWatchCallbackTrackingMap);
+  watchCompilerHost.watchFile = saveWatchCallback(
+    ts,
+    fileWatchCallbackTrackingMap,
+  );
   watchCompilerHost.watchDirectory = saveWatchCallback(
+    ts,
     folderWatchCallbackTrackingMap,
   );
 
@@ -364,6 +391,16 @@ function createWatchProgram(
   watchCompilerHost.setTimeout = undefined;
   watchCompilerHost.clearTimeout = undefined;
   return ts.createWatchProgram(watchCompilerHost);
+
+  /**
+   * Appropriately report issues found when reading a config file
+   * @param diagnostic The diagnostic raised when creating a program
+   */
+  function diagnosticReporter(diagnostic: ts.Diagnostic): void {
+    throw new Error(
+      ts.flattenDiagnosticMessageText(diagnostic.messageText, ts.sys.newLine),
+    );
+  }
 }
 
 function hasTSConfigChanged(tsconfigPath: CanonicalPath): boolean {
@@ -382,6 +419,7 @@ function hasTSConfigChanged(tsconfigPath: CanonicalPath): boolean {
 }
 
 function maybeInvalidateProgram(
+  ts: typeof import('typescript'),
   existingWatch: ts.WatchOfConfigFile<ts.BuilderProgram>,
   filePath: CanonicalPath,
   tsconfigPath: CanonicalPath,
@@ -407,7 +445,9 @@ function maybeInvalidateProgram(
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     fileWatchCallbackTrackingMap
       .get(tsconfigPath)!
-      .forEach(cb => cb(tsconfigPath, ts.FileWatcherEventKind.Changed));
+      .forEach(cb =>
+        cb(tsconfigPath, 1 satisfies ts.FileWatcherEventKind.Changed),
+      );
 
     // tsconfig change means that the file list more than likely changed, so clear the cache
     programFileListCache.delete(tsconfigPath);
@@ -434,9 +474,9 @@ function maybeInvalidateProgram(
     if (folderWatchCallbacks) {
       for (const cb of folderWatchCallbacks) {
         if (currentDir !== current) {
-          cb(currentDir, ts.FileWatcherEventKind.Changed);
+          cb(currentDir, 1 satisfies ts.FileWatcherEventKind.Changed);
         }
-        cb(current, ts.FileWatcherEventKind.Changed);
+        cb(current, 1 satisfies ts.FileWatcherEventKind.Changed);
       }
       hasCallback = true;
     }
@@ -483,7 +523,10 @@ function maybeInvalidateProgram(
   }
 
   const fileWatchCallbacks = fileWatchCallbackTrackingMap.get(
-    getCanonicalFileName(deletedFile),
+    getCanonicalFileName(
+      ts.sys.useCaseSensitiveFileNames ?? false,
+      deletedFile,
+    ),
   );
   if (!fileWatchCallbacks) {
     // shouldn't happen, but just in case
@@ -493,7 +536,7 @@ function maybeInvalidateProgram(
 
   log('Marking file as deleted. %s', deletedFile);
   fileWatchCallbacks.forEach(cb =>
-    cb(deletedFile, ts.FileWatcherEventKind.Deleted),
+    cb(deletedFile, 2 satisfies ts.FileWatcherEventKind.Deleted),
   );
 
   // deleted files means that the file list _has_ changed, so clear the cache

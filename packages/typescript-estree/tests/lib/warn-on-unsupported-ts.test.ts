@@ -1,3 +1,4 @@
+import * as ts from 'typescript';
 import semver from 'semver';
 
 import type * as Parser from '../../src/parser';
@@ -24,7 +25,7 @@ describe('Warn on unsupported TypeScript version', () => {
     jest.spyOn(console, 'log').mockImplementation();
     process.stdout.isTTY = true;
 
-    parser.parse('');
+    parser.parse(ts, '');
     expect(console.log).toHaveBeenCalledWith(
       expect.stringContaining(
         'WARNING: You are currently running a version of TypeScript which is not officially supported by @typescript-eslint/typescript-estree',
@@ -37,7 +38,7 @@ describe('Warn on unsupported TypeScript version', () => {
     const loggerFn = jest.fn();
     process.stdout.isTTY = false;
 
-    parser.parse('', {
+    parser.parse(ts, '', {
       loggerFn,
     });
     expect(loggerFn).toHaveBeenCalled();
@@ -48,7 +49,7 @@ describe('Warn on unsupported TypeScript version', () => {
     jest.spyOn(console, 'log').mockImplementation();
     process.stdout.isTTY = false;
 
-    parser.parse('');
+    parser.parse(ts, '');
     expect(console.log).not.toHaveBeenCalled();
   });
 });

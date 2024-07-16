@@ -46,6 +46,7 @@ describe('semanticInfo', () => {
     it(
       formatSnapshotName(filename, FIXTURES_DIR, path.extname(filename)),
       createSnapshotTestBlock(
+        ts,
         code,
         createOptions(filename),
         /*generateServices*/ true,
@@ -62,9 +63,9 @@ describe('semanticInfo', () => {
       project: './tsconfig.json',
     };
     expect(
-      parseAndGenerateServices(code, optionsProjectString).services.program,
+      parseAndGenerateServices(ts, code, optionsProjectString).services.program,
     ).toBe(
-      parseAndGenerateServices(code, optionsProjectString).services.program,
+      parseAndGenerateServices(ts, code, optionsProjectString).services.program,
     );
   });
 
@@ -80,8 +81,8 @@ describe('semanticInfo', () => {
       ...options,
       project: ['./tsconfig.json'],
     };
-    const fromString = parseAndGenerateServices(code, optionsProjectString);
-    const fromArray = parseAndGenerateServices(code, optionsProjectArray);
+    const fromString = parseAndGenerateServices(ts, code, optionsProjectString);
+    const fromArray = parseAndGenerateServices(ts, code, optionsProjectArray);
 
     expect(fromString.services.program).toBe(fromArray.services.program);
 
@@ -107,10 +108,12 @@ describe('semanticInfo', () => {
       project: `./tsconfig.json`,
     };
     const absolutePathResult = parseAndGenerateServices(
+      ts,
       code,
       optionsAbsolutePath,
     );
     const relativePathResult = parseAndGenerateServices(
+      ts,
       code,
       optionsRelativePath,
     );
@@ -130,6 +133,7 @@ describe('semanticInfo', () => {
   it('isolated-file tests', () => {
     const fileName = path.resolve(FIXTURES_DIR, 'isolated-file.src.ts');
     const parseResult = parseCodeAndGenerateServices(
+      ts,
       fs.readFileSync(fileName, 'utf8'),
       createOptions(fileName),
     );
@@ -140,6 +144,7 @@ describe('semanticInfo', () => {
   it('isolated-vue-file tests', () => {
     const fileName = path.resolve(FIXTURES_DIR, 'extra-file-extension.vue');
     const parseResult = parseCodeAndGenerateServices(
+      ts,
       fs.readFileSync(fileName, 'utf8'),
       {
         ...createOptions(fileName),
@@ -156,6 +161,7 @@ describe('semanticInfo', () => {
       'non-existent-estree-nodes.src.ts',
     );
     const parseResult = parseCodeAndGenerateServices(
+      ts,
       fs.readFileSync(fileName, 'utf8'),
       createOptions(fileName),
     );
@@ -182,6 +188,7 @@ describe('semanticInfo', () => {
   it('imported-file tests', () => {
     const fileName = path.resolve(FIXTURES_DIR, 'import-file.src.ts');
     const parseResult = parseCodeAndGenerateServices(
+      ts,
       fs.readFileSync(fileName, 'utf8'),
       createOptions(fileName),
     );
@@ -214,6 +221,7 @@ describe('semanticInfo', () => {
 
   it('non-existent file tests', () => {
     const parseResult = parseCodeAndGenerateServices(
+      ts,
       `const x = [parseInt("5")];`,
       {
         ...createOptions('<input>'),
@@ -239,6 +247,7 @@ describe('semanticInfo', () => {
 
   it('non-existent file should provide parents nodes', () => {
     const parseResult = parseCodeAndGenerateServices(
+      ts,
       `function M() { return Base }`,
       { ...createOptions('<input>'), project: undefined },
     );
@@ -250,6 +259,7 @@ describe('semanticInfo', () => {
     it(`non-existent file should throw error when project provided`, () => {
       expect(() =>
         parseCodeAndGenerateServices(
+          ts,
           `function M() { return Base }`,
           createOptions('<input>'),
         ),
@@ -266,6 +276,7 @@ describe('semanticInfo', () => {
       badConfig.project = './tsconfigs.json';
       expect(() =>
         parseCodeAndGenerateServices(
+          ts,
           fs.readFileSync(fileName, 'utf8'),
           badConfig,
         ),
@@ -278,6 +289,7 @@ describe('semanticInfo', () => {
       badConfig.project = '.';
       expect(() =>
         parseCodeAndGenerateServices(
+          ts,
           fs.readFileSync(fileName, 'utf8'),
           badConfig,
         ),
@@ -293,6 +305,7 @@ describe('semanticInfo', () => {
       badConfig.project = './badTSConfig/tsconfig.json';
       expect(() =>
         parseCodeAndGenerateServices(
+          ts,
           fs.readFileSync(fileName, 'utf8'),
           badConfig,
         ),
@@ -303,7 +316,7 @@ describe('semanticInfo', () => {
   }
 
   it('default program produced with option', () => {
-    const parseResult = parseCodeAndGenerateServices('var foo = 5;', {
+    const parseResult = parseCodeAndGenerateServices(ts, 'var foo = 5;', {
       ...createOptions('<input>'),
       DEPRECATED__createDefaultProgram: true,
     });
@@ -315,7 +328,9 @@ describe('semanticInfo', () => {
     const fileName = path.resolve(FIXTURES_DIR, 'isolated-file.src.ts');
     const badConfig = createOptions(fileName);
     badConfig.programs = [];
-    expect(() => parseAndGenerateServices('const foo = 5;', badConfig)).toThrow(
+    expect(() =>
+      parseAndGenerateServices(ts, 'const foo = 5;', badConfig),
+    ).toThrow(
       'You have set parserOptions.programs to an empty array. This will cause all files to not be found in existing programs. Either provide one or more existing TypeScript Program instances in the array, or remove the parserOptions.programs setting.',
     );
   });
@@ -323,8 +338,14 @@ describe('semanticInfo', () => {
   if (process.env.TYPESCRIPT_ESLINT_EXPERIMENTAL_TSSERVER !== 'true') {
     it(`first matching provided program instance is returned in result`, () => {
       const filename = testFiles[0];
-      const program1 = createProgram(path.join(FIXTURES_DIR, 'tsconfig.json'));
-      const program2 = createProgram(path.join(FIXTURES_DIR, 'tsconfig.json'));
+      const program1 = createProgram(
+        ts,
+        path.join(FIXTURES_DIR, 'tsconfig.json'),
+      );
+      const program2 = createProgram(
+        ts,
+        path.join(FIXTURES_DIR, 'tsconfig.json'),
+      );
       const code = fs.readFileSync(path.join(FIXTURES_DIR, filename), 'utf8');
       const options = createOptions(filename);
       const optionsProjectString = {
@@ -332,21 +353,25 @@ describe('semanticInfo', () => {
         programs: [program1, program2],
         project: './tsconfig.json',
       };
-      const parseResult = parseAndGenerateServices(code, optionsProjectString);
+      const parseResult = parseAndGenerateServices(
+        ts,
+        code,
+        optionsProjectString,
+      );
       expect(parseResult.services.program).toBe(program1);
     });
   }
 
   it('file not in single provided program instance should throw', () => {
     const filename = 'non-existent-file.ts';
-    const program = createProgram(path.join(FIXTURES_DIR, 'tsconfig.json'));
+    const program = createProgram(ts, path.join(FIXTURES_DIR, 'tsconfig.json'));
     const options = createOptions(filename);
     const optionsWithSingleProgram = {
       ...options,
       programs: [program],
     };
     expect(() =>
-      parseAndGenerateServices('const foo = 5;', optionsWithSingleProgram),
+      parseAndGenerateServices(ts, 'const foo = 5;', optionsWithSingleProgram),
     ).toThrow(
       process.env.TYPESCRIPT_ESLINT_EXPERIMENTAL_TSSERVER === 'true'
         ? `${filename} was not found by the project service. Consider either including it in the tsconfig.json or including it in allowDefaultProjectForFiles.`
@@ -356,27 +381,37 @@ describe('semanticInfo', () => {
 
   it('file not in multiple provided program instances should throw a program instance error', () => {
     const filename = 'non-existent-file.ts';
-    const program1 = createProgram(path.join(FIXTURES_DIR, 'tsconfig.json'));
+    const program1 = createProgram(
+      ts,
+      path.join(FIXTURES_DIR, 'tsconfig.json'),
+    );
     const options = createOptions(filename);
     const optionsWithSingleProgram = {
       ...options,
       programs: [program1],
     };
     expect(() =>
-      parseAndGenerateServices('const foo = 5;', optionsWithSingleProgram),
+      parseAndGenerateServices(ts, 'const foo = 5;', optionsWithSingleProgram),
     ).toThrow(
       process.env.TYPESCRIPT_ESLINT_EXPERIMENTAL_TSSERVER === 'true'
         ? `${filename} was not found by the project service. Consider either including it in the tsconfig.json or including it in allowDefaultProjectForFiles.`
         : `The file was not found in any of the provided program instance(s): ${filename}`,
     );
 
-    const program2 = createProgram(path.join(FIXTURES_DIR, 'tsconfig.json'));
+    const program2 = createProgram(
+      ts,
+      path.join(FIXTURES_DIR, 'tsconfig.json'),
+    );
     const optionsWithMultiplePrograms = {
       ...options,
       programs: [program1, program2],
     };
     expect(() =>
-      parseAndGenerateServices('const foo = 5;', optionsWithMultiplePrograms),
+      parseAndGenerateServices(
+        ts,
+        'const foo = 5;',
+        optionsWithMultiplePrograms,
+      ),
     ).toThrow(
       process.env.TYPESCRIPT_ESLINT_EXPERIMENTAL_TSSERVER === 'true'
         ? `${filename} was not found by the project service. Consider either including it in the tsconfig.json or including it in allowDefaultProjectForFiles.`
@@ -385,12 +420,15 @@ describe('semanticInfo', () => {
   });
 
   it('createProgram fails on non-existent file', () => {
-    expect(() => createProgram('tsconfig.non-existent.json')).toThrow();
+    expect(() => createProgram(ts, 'tsconfig.non-existent.json')).toThrow();
   });
 
   it('createProgram fails on tsconfig with errors', () => {
     expect(() =>
-      createProgram(path.join(FIXTURES_DIR, 'badTSConfig', 'tsconfig.json')),
+      createProgram(
+        ts,
+        path.join(FIXTURES_DIR, 'badTSConfig', 'tsconfig.json'),
+      ),
     ).toThrow();
   });
 });

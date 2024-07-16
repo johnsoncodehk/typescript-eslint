@@ -31,6 +31,7 @@ export function clearGlobCache(): void {
  * Normalizes, sanitizes, resolves and filters the provided project paths
  */
 export function resolveProjectList(
+  ts: typeof import('typescript'),
   options: Readonly<{
     cacheLifetime?: TSESTreeOptions['cacheLifetime'];
     project: string[] | null;
@@ -66,7 +67,7 @@ export function resolveProjectList(
     // prefix with a ! for not match glob
     .map(folder => (folder.startsWith('!') ? folder : `!${folder}`));
 
-  const cacheKey = getHash({
+  const cacheKey = getHash(ts, {
     project: sanitizedProjects,
     projectFolderIgnoreList,
     tsconfigRootDir: options.tsconfigRootDir,
@@ -104,6 +105,7 @@ export function resolveProjectList(
       )
       .map(project => [
         getCanonicalFileName(
+          ts.sys?.useCaseSensitiveFileNames ?? false,
           ensureAbsolutePath(project, options.tsconfigRootDir),
         ),
         ensureAbsolutePath(project, options.tsconfigRootDir),
@@ -119,15 +121,18 @@ export function resolveProjectList(
   return uniqueCanonicalProjectPaths;
 }
 
-function getHash({
-  project,
-  projectFolderIgnoreList,
-  tsconfigRootDir,
-}: Readonly<{
-  project: readonly string[];
-  projectFolderIgnoreList: readonly string[];
-  tsconfigRootDir: string;
-}>): string {
+function getHash(
+  ts: typeof import('typescript'),
+  {
+    project,
+    projectFolderIgnoreList,
+    tsconfigRootDir,
+  }: Readonly<{
+    project: readonly string[];
+    projectFolderIgnoreList: readonly string[];
+    tsconfigRootDir: string;
+  }>,
+): string {
   // create a stable representation of the config
   const hashObject = {
     tsconfigRootDir,
@@ -137,7 +142,7 @@ function getHash({
     projectFolderIgnoreList: [...projectFolderIgnoreList].sort(),
   };
 
-  return createHash(JSON.stringify(hashObject));
+  return createHash(ts, JSON.stringify(hashObject));
 }
 
 /**

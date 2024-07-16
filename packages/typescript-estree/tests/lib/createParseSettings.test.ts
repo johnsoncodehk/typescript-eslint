@@ -1,3 +1,4 @@
+import * as ts from 'typescript';
 import { createParseSettings } from '../../src/parseSettings/createParseSettings';
 
 const projectService = { service: true };
@@ -11,7 +12,7 @@ describe('createParseSettings', () => {
     it('is created when options.EXPERIMENTAL_useProjectService is enabled', () => {
       process.env.TYPESCRIPT_ESLINT_EXPERIMENTAL_TSSERVER = 'false';
 
-      const parseSettings = createParseSettings('', {
+      const parseSettings = createParseSettings(ts, '', {
         EXPERIMENTAL_useProjectService: true,
       });
 
@@ -21,7 +22,7 @@ describe('createParseSettings', () => {
     it('is created when options.EXPERIMENTAL_useProjectService is undefined, options.project is true, and process.env.TYPESCRIPT_ESLINT_EXPERIMENTAL_TSSERVER is true', () => {
       process.env.TYPESCRIPT_ESLINT_EXPERIMENTAL_TSSERVER = 'true';
 
-      const parseSettings = createParseSettings('', {
+      const parseSettings = createParseSettings(ts, '', {
         EXPERIMENTAL_useProjectService: undefined,
         project: true,
       });
@@ -32,7 +33,7 @@ describe('createParseSettings', () => {
     it('is not created when options.EXPERIMENTAL_useProjectService is undefined, options.project is falsy, and process.env.TYPESCRIPT_ESLINT_EXPERIMENTAL_TSSERVER is true', () => {
       process.env.TYPESCRIPT_ESLINT_EXPERIMENTAL_TSSERVER = 'true';
 
-      const parseSettings = createParseSettings('', {
+      const parseSettings = createParseSettings(ts, '', {
         EXPERIMENTAL_useProjectService: undefined,
       });
 
@@ -42,7 +43,7 @@ describe('createParseSettings', () => {
     it('is not created when options.EXPERIMENTAL_useProjectService is false, options.project is true, and process.env.TYPESCRIPT_ESLINT_EXPERIMENTAL_TSSERVER is true', () => {
       process.env.TYPESCRIPT_ESLINT_EXPERIMENTAL_TSSERVER = 'true';
 
-      const parseSettings = createParseSettings('', {
+      const parseSettings = createParseSettings(ts, '', {
         EXPERIMENTAL_useProjectService: false,
         project: true,
       });
@@ -53,8 +54,8 @@ describe('createParseSettings', () => {
 
   describe('tsconfigMatchCache', () => {
     it('reuses the TSConfig match cache when called a subsequent time', () => {
-      const parseSettings1 = createParseSettings('input.ts');
-      const parseSettings2 = createParseSettings('input.ts');
+      const parseSettings1 = createParseSettings(ts, 'input.ts');
+      const parseSettings2 = createParseSettings(ts, 'input.ts');
 
       expect(parseSettings1.tsconfigMatchCache).toBe(
         parseSettings2.tsconfigMatchCache,

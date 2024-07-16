@@ -1,5 +1,6 @@
 import glob = require('glob');
 import * as path from 'path';
+import * as ts from 'typescript';
 
 import { createProgramFromConfigFile as createProgramFromConfigFileOriginal } from '../../src/create-program/useProvidedPrograms';
 import {
@@ -114,7 +115,7 @@ describe('semanticInfo - singleRun', () => {
      * At this point there is nothing to indicate it is a single run, so createProgramFromConfigFile should
      * never be called
      */
-    parseAndGenerateServices(code, options);
+    parseAndGenerateServices(ts, code, options);
     expect(createProgramFromConfigFile).not.toHaveBeenCalled();
 
     // Restore process data
@@ -129,7 +130,7 @@ describe('semanticInfo - singleRun', () => {
     const originalEnvCI = process.env.CI;
     process.env.CI = 'true';
 
-    parseAndGenerateServices(code, options);
+    parseAndGenerateServices(ts, code, options);
     expect(createProgramFromConfigFile).not.toHaveBeenCalled();
 
     // Restore process data
@@ -145,12 +146,12 @@ describe('semanticInfo - singleRun', () => {
       const originalTSESTreeSingleRun = process.env.TSESTREE_SINGLE_RUN;
       process.env.TSESTREE_SINGLE_RUN = 'true';
 
-      const resultProgram = parseAndGenerateServices(code, options).services
+      const resultProgram = parseAndGenerateServices(ts, code, options).services
         .program;
       expect(resultProgram).toEqual(mockProgram);
 
       // Call parseAndGenerateServices() again to ensure caching of Programs is working correctly...
-      parseAndGenerateServices(code, options);
+      parseAndGenerateServices(ts, code, options);
       // ...by asserting this was only called once per project
       expect(createProgramFromConfigFile).toHaveBeenCalledTimes(
         tsconfigs.length,
@@ -177,12 +178,12 @@ describe('semanticInfo - singleRun', () => {
       const originalEnvCI = process.env.CI;
       process.env.CI = 'true';
 
-      const resultProgram = parseAndGenerateServices(code, options).services
+      const resultProgram = parseAndGenerateServices(ts, code, options).services
         .program;
       expect(resultProgram).toEqual(mockProgram);
 
       // Call parseAndGenerateServices() again to ensure caching of Programs is working correctly...
-      parseAndGenerateServices(code, options);
+      parseAndGenerateServices(ts, code, options);
       // ...by asserting this was only called once per project
       expect(createProgramFromConfigFile).toHaveBeenCalledTimes(
         tsconfigs.length,
@@ -208,12 +209,12 @@ describe('semanticInfo - singleRun', () => {
       const originalProcessArgv = process.argv;
       process.argv = ['', path.normalize('node_modules/.bin/eslint'), ''];
 
-      const resultProgram = parseAndGenerateServices(code, options).services
+      const resultProgram = parseAndGenerateServices(ts, code, options).services
         .program;
       expect(resultProgram).toEqual(mockProgram);
 
       // Call parseAndGenerateServices() again to ensure caching of Programs is working correctly...
-      parseAndGenerateServices(code, options);
+      parseAndGenerateServices(ts, code, options);
       // ...by asserting this was only called once per project
       expect(createProgramFromConfigFile).toHaveBeenCalledTimes(
         tsconfigs.length,
@@ -246,13 +247,14 @@ describe('semanticInfo - singleRun', () => {
       };
 
       const resultProgram = parseAndGenerateServices(
+        ts,
         code,
         optionsWithReversedTsconfigs,
       ).services.program;
       expect(resultProgram).toEqual(mockProgram);
 
       // Call parseAndGenerateServices() again to ensure caching of Programs is working correctly...
-      parseAndGenerateServices(code, options);
+      parseAndGenerateServices(ts, code, options);
       // ...by asserting this was only called only once
       expect(createProgramFromConfigFile).toHaveBeenCalledTimes(1);
 

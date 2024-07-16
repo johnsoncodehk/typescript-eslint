@@ -1,6 +1,6 @@
 import debug from 'debug';
 import path from 'path';
-import * as ts from 'typescript';
+import type * as ts from 'typescript';
 
 import { firstDefined } from '../node-utils';
 import type { ParseSettings } from '../parseSettings';
@@ -11,14 +11,14 @@ import { getAstFromProgram } from './shared';
 const log = debug('typescript-eslint:typescript-estree:createProjectProgram');
 
 const DEFAULT_EXTRA_FILE_EXTENSIONS = [
-  ts.Extension.Ts,
-  ts.Extension.Tsx,
-  ts.Extension.Js,
-  ts.Extension.Jsx,
-  ts.Extension.Mjs,
-  ts.Extension.Mts,
-  ts.Extension.Cjs,
-  ts.Extension.Cts,
+  '.ts' /* ts.Extension.Ts */,
+  '.tsx' /* ts.Extension.Tsx */,
+  '.js' /* ts.Extension.Js */,
+  '.jsx' /* ts.Extension.Jsx */,
+  '.mjs' /* ts.Extension.Mjs */,
+  '.mts' /* ts.Extension.Mts */,
+  '.cjs' /* ts.Extension.Cjs */,
+  '.cts' /* ts.Extension.Cts */,
 ] as readonly string[];
 
 /**

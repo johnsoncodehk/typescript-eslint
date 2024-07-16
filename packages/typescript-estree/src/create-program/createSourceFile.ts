@@ -1,5 +1,5 @@
 import debug from 'debug';
-import * as ts from 'typescript';
+import type * as ts from 'typescript';
 
 import type { ParseSettings } from '../parseSettings';
 import { isSourceFile } from '../source-files';
@@ -8,7 +8,10 @@ import type { ASTAndNoProgram } from './shared';
 
 const log = debug('typescript-eslint:typescript-estree:createSourceFile');
 
-function createSourceFile(parseSettings: ParseSettings): ts.SourceFile {
+function createSourceFile(
+  ts: typeof import('typescript'),
+  parseSettings: ParseSettings,
+): ts.SourceFile {
   log(
     'Getting AST without type information in %s mode for: %s',
     parseSettings.jsx ? 'TSX' : 'TS',
@@ -29,9 +32,12 @@ function createSourceFile(parseSettings: ParseSettings): ts.SourceFile {
       );
 }
 
-function createNoProgram(parseSettings: ParseSettings): ASTAndNoProgram {
+function createNoProgram(
+  ts: typeof import('typescript'),
+  parseSettings: ParseSettings,
+): ASTAndNoProgram {
   return {
-    ast: createSourceFile(parseSettings),
+    ast: createSourceFile(ts, parseSettings),
     program: null,
   };
 }

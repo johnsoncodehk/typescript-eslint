@@ -1,6 +1,6 @@
 import debug from 'debug';
 import path from 'path';
-import * as ts from 'typescript';
+import type * as ts from 'typescript';
 
 import type { ParseSettings } from '../parseSettings';
 import type { ASTAndDefiniteProgram } from './shared';
@@ -16,6 +16,7 @@ const log = debug('typescript-eslint:typescript-estree:createDefaultProgram');
  * Please do not use it.
  */
 function createDefaultProgram(
+  ts: typeof import('typescript'),
   parseSettings: ParseSettings,
 ): ASTAndDefiniteProgram | undefined {
   log(

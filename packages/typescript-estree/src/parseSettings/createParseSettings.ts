@@ -1,5 +1,5 @@
 import debug from 'debug';
-import * as ts from 'typescript';
+import type * as ts from 'typescript';
 
 import type { ProjectServiceSettings } from '../create-program/createProjectService';
 import { createProjectService } from '../create-program/createProjectService';
@@ -28,14 +28,15 @@ let TSSERVER_PROJECT_SERVICE: ProjectServiceSettings | null = null;
 // https://github.com/microsoft/TypeScript/issues/56579
 /* eslint-disable @typescript-eslint/no-unnecessary-condition */
 const JSDocParsingMode = {
-  ParseAll: ts.JSDocParsingMode?.ParseAll,
-  ParseNone: ts.JSDocParsingMode?.ParseNone,
-  ParseForTypeErrors: ts.JSDocParsingMode?.ParseForTypeErrors,
-  ParseForTypeInfo: ts.JSDocParsingMode?.ParseForTypeInfo,
+  ParseAll: 0 satisfies typeof ts.JSDocParsingMode.ParseAll,
+  ParseNone: 1 satisfies typeof ts.JSDocParsingMode.ParseNone,
+  ParseForTypeErrors: 2 satisfies typeof ts.JSDocParsingMode.ParseForTypeErrors,
+  ParseForTypeInfo: 3 satisfies typeof ts.JSDocParsingMode.ParseForTypeInfo,
 } as const;
 /* eslint-enable @typescript-eslint/no-unnecessary-condition */
 
 export function createParseSettings(
+  ts: typeof import('typescript'),
   code: ts.SourceFile | string,
   options: Partial<TSESTreeOptions> = {},
 ): MutableParseSettings {
@@ -159,7 +160,7 @@ export function createParseSettings(
 
   // Providing a program or project service overrides project resolution
   if (!parseSettings.programs && !parseSettings.EXPERIMENTAL_projectService) {
-    parseSettings.projects = resolveProjectList({
+    parseSettings.projects = resolveProjectList(ts, {
       cacheLifetime: options.cacheLifetime,
       project: getProjectConfigFiles(parseSettings, options.project),
       projectFolderIgnoreList: options.projectFolderIgnoreList,
@@ -179,7 +180,7 @@ export function createParseSettings(
     parseSettings.jsDocParsingMode = JSDocParsingMode.ParseNone;
   }
 
-  warnAboutTSVersion(parseSettings, passedLoggerFn);
+  warnAboutTSVersion(ts, parseSettings, passedLoggerFn);
 
   return parseSettings;
 }

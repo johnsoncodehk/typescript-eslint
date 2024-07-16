@@ -1,6 +1,6 @@
 import path from 'path';
 import type { Program } from 'typescript';
-import * as ts from 'typescript';
+import type * as ts from 'typescript';
 
 import type { ParseSettings } from '../parseSettings';
 
@@ -53,20 +53,19 @@ function createDefaultCompilerOptionsFromExtra(
 // This narrows the type so we can be sure we're passing canonical names in the correct places
 type CanonicalPath = string & { __brand: unknown };
 
-// typescript doesn't provide a ts.sys implementation for browser environments
-const useCaseSensitiveFileNames =
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-  ts.sys !== undefined ? ts.sys.useCaseSensitiveFileNames : true;
-const correctPathCasing = useCaseSensitiveFileNames
-  ? (filePath: string): string => filePath
-  : (filePath: string): string => filePath.toLowerCase();
-
-function getCanonicalFileName(filePath: string): CanonicalPath {
+function getCanonicalFileName(
+  useCaseSensitiveFileNames: boolean,
+  filePath: string,
+): CanonicalPath {
   let normalized = path.normalize(filePath);
   if (normalized.endsWith(path.sep)) {
     normalized = normalized.slice(0, -1);
   }
-  return correctPathCasing(normalized) as CanonicalPath;
+  if (useCaseSensitiveFileNames) {
+    return normalized as CanonicalPath;
+  } else {
+    return (normalized = normalized.toLowerCase() as CanonicalPath);
+  }
 }
 
 function ensureAbsolutePath(p: string, tsconfigRootDir: string): string {
@@ -80,9 +79,9 @@ function canonicalDirname(p: CanonicalPath): CanonicalPath {
 }
 
 const DEFINITION_EXTENSIONS = [
-  ts.Extension.Dts,
-  ts.Extension.Dcts,
-  ts.Extension.Dmts,
+  '.d.ts' /* ts.Extension.Dts */,
+  '.d.cts' /* ts.Extension.Dcts */,
+  '.d.mts' /* ts.Extension.Dmts */,
 ] as const;
 function getExtension(fileName: string | undefined): string | null {
   if (!fileName) {
@@ -117,7 +116,7 @@ function getAstFromProgram(
  * @param content hashed contend
  * @returns hashed result
  */
-function createHash(content: string): string {
+function createHash(ts: typeof import('typescript'), content: string): string {
   // No ts.sys in browser environments.
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
   if (ts.sys?.createHash) {
